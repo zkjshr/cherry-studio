@@ -73,6 +73,10 @@ export class EnterpriseConfigService extends BaseService {
       })
     } catch (error) {
       logger.warn('Enterprise config fetch failed', error as Error)
+      await saveEnterpriseStateSafe({
+        ...state,
+        lastError: `fetch failed: ${(error as Error).message}`
+      })
     } finally {
       this.inFlightSync = null
     }
@@ -100,6 +104,10 @@ export class EnterpriseConfigService extends BaseService {
       case 'idle':
         logger.warn('Enterprise config server unreachable and no fresh apply is possible', {
           httpStatus: response?.status ?? null
+        })
+        await saveEnterpriseStateSafe({
+          ...state,
+          lastError: `server unreachable (status ${response?.status ?? 'network'})`
         })
     }
   }
@@ -155,8 +163,9 @@ export class EnterpriseConfigService extends BaseService {
     try {
       const result = await applyEnterpriseConfig(cached)
       this.appliedThisBoot = true
+      // 实际生效的是缓存里的版本；沿用 state 旧值会让下次 If-None-Match 倒退、白拉一次 200
       await saveEnterpriseStateSafe({
-        lastAppliedVersion: state.lastAppliedVersion ?? cached.config_version,
+        lastAppliedVersion: cached.config_version,
         lastSyncedAt: new Date().toISOString(),
         lastError: null
       })

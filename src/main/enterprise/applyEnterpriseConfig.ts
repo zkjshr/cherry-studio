@@ -31,6 +31,7 @@ import { DataApiError, ErrorCode } from '@shared/data/api/errors'
 import type { CreateModelDto } from '@shared/data/api/schemas/models'
 import { DEFAULT_ASSISTANT_SETTINGS, type Assistant, type AssistantSettings } from '@shared/data/types/assistant'
 import type { UniqueModelId } from '@shared/data/types/model'
+import { createUniqueModelId } from '@shared/data/types/model'
 import type { MiniApp } from '@shared/data/types/miniApp'
 import type { McpServerType } from '@shared/data/types/mcpServer'
 
@@ -162,7 +163,9 @@ function reconcileProviderModels(providerId: string, item: EnterpriseProviderCon
     const toAdd: { dto: CreateModelDto }[] = toAddIds.map((modelId) => ({
       dto: { providerId, modelId, name: desiredById.get(modelId)?.name }
     }))
-    modelService.reconcileForProvider(providerId, { toAdd, toRemove: toRemoveIds })
+    // reconcileForProvider 匹配 user_model.id（UniqueModelId），toRemove 必须带 providerId 前缀
+    const toRemove = toRemoveIds.map((modelId) => createUniqueModelId(providerId, modelId))
+    modelService.reconcileForProvider(providerId, { toAdd, toRemove })
   }
 
   // Converge status/display fields for models the config continues to list
