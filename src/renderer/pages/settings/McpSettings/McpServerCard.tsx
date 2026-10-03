@@ -269,7 +269,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, onEdit }) => {
           <Switch
             checked={server.isActive}
             key={server.id}
-            disabled={isLoading}
+            disabled={isLoading || isEnterpriseMcpServerName(server.name)}
             size="xs"
             className="shadow-none data-[state=checked]:bg-success"
             onCheckedChange={handleToggleActive}

@@ -32,7 +32,11 @@ const EnterpriseSettingsCard = () => {
       const result = await window.api.enterprise.sync()
       // The sync result already carries a fresh snapshot — write it instead of re-querying.
       await mutate(result.state, { revalidate: false })
-      if (result.ok) {
+      // syncOnce never throws: failures land in `state.lastError` while `ok` only
+      // covers the IPC envelope, so the toast must consult the snapshot too.
+      if (result.state.lastError) {
+        toast.error(`${t('settings.enterprise.sync_failed')}: ${result.state.lastError}`)
+      } else if (result.ok) {
         toast.success(t('settings.enterprise.sync_success'))
       } else {
         toast.error(`${t('settings.enterprise.sync_failed')}${result.error ? `: ${result.error}` : ''}`)

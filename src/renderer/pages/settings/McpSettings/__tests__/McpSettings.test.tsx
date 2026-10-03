@@ -380,4 +380,15 @@ describe('McpSettings', () => {
     expect(mocks.toastSuccess).toHaveBeenCalled()
     expect(mocks.toastError).not.toHaveBeenCalled()
   })
+
+  it('keeps an enterprise-managed server read-only even when reached by URL', async () => {
+    currentSearch = {}
+    currentServer = { id: 'managed-server', name: '[企业] managed', type: 'stdio', command: 'managed', isActive: false }
+
+    render(<McpSettings />)
+
+    expect(screen.queryByRole('button', { name: /common\.delete/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /common\.save/ })).not.toBeInTheDocument()
+    expect(await screen.findByText('settings.enterprise.readonly_notice')).toBeInTheDocument()
+  })
 })

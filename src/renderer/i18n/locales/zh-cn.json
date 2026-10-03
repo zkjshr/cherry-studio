@@ -4218,6 +4218,7 @@
   "settings.enterprise.synced_at": "已同步 v{{version}} · {{time}}",
   "settings.enterprise.not_enabled": "未启用企业配置同步",
   "settings.enterprise.not_synced": "尚未同步",
+  "settings.enterprise.readonly_notice": "该服务器由企业配置统一下发，此处只读",
   "settings.enterprise.title": "企业管理",
   "settings.doctor.actions.back_to_checks": "返回检查结果",
   "settings.doctor.actions.cancel_run": "取消检查",

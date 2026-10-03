@@ -3,7 +3,9 @@ import type { KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Badge, Button, Switch, Tooltip } from '@cherrystudio/ui'
+import EnterpriseBadge from '@renderer/components/EnterpriseBadge'
 import { useSkillMutationsById } from '@renderer/hooks/resourceCatalog'
+import { useEnterpriseState } from '@renderer/hooks/useEnterpriseState'
 import { toast } from '@renderer/services/toast'
 import type { ResourceItem } from '@renderer/types/resourceCatalog'
 import { RESOURCE_TYPE_META } from '@renderer/utils/resourceCatalog'
@@ -84,6 +86,15 @@ export function ResourceCard({
   const showOverflowMenu = hasOverflowActions(r)
   const visibleGroup = r.type === 'assistant' ? r.groupName : undefined
   const skillVersion = r.type === 'skill' ? r.raw.version?.trim() : undefined
+  // Enterprise-managed assistants are read-only: card click must not open the
+  // edit dialog, and the card carries the shared 「企业」 badge.
+  const { enterpriseState } = useEnterpriseState()
+  const isManagedAssistant =
+    r.type === 'assistant' && (enterpriseState?.managedAssistantIds ?? []).includes(r.id)
+  const openForEdit = () => {
+    if (isManagedAssistant) return
+    onEdit(r)
+  }
 
   return (
     <div
@@ -97,8 +108,8 @@ export function ResourceCard({
       role="button"
       tabIndex={0}
       aria-label={r.name}
-      onClick={() => onEdit(r)}
-      onKeyDown={(e) => activateCardOnKeyDown(e, () => onEdit(r))}>
+      onClick={openForEdit}
+      onKeyDown={(e) => activateCardOnKeyDown(e, openForEdit)}>
       <div className={isSkillGrid ? 'px-4 py-2' : isSettings ? 'p-4' : 'p-3.5'}>
         <div
           className={isSkillGrid ? 'grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-3 gap-y-1' : 'flex items-center gap-3'}>
@@ -119,6 +130,7 @@ export function ResourceCard({
                   {r.name}
                 </h4>
               </Tooltip>
+              {isManagedAssistant && <EnterpriseBadge />}
               {skillVersion && (
                 <Badge
                   variant="secondary"

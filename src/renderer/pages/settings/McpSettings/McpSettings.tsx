@@ -76,6 +76,9 @@ const McpSettingsContent: React.FC<McpSettingsContentProps> = ({ server, updateM
   const { t } = useTranslation()
   const search = mcpSettingsRouteApi.useSearch<AppRouter>()
   const serverId = server.id
+  // Enterprise-managed servers are read-only: the route is reachable by URL/
+  // deep-link past the list-row guard, so the detail page enforces it itself.
+  const isManagedServer = isEnterpriseMcpServerName(server.name)
   const [initialFormValues] = useState(() => toMcpFormDefaultValues(server))
 
   const updateServerBody = useCallback((body: UpdateMcpServerDto) => updateMcpServer({ body }), [updateMcpServer])
@@ -216,6 +219,7 @@ const McpSettingsContent: React.FC<McpSettingsContentProps> = ({ server, updateM
   // Save the form data
   const onSave = async () => {
     if (!server) return
+    if (isManagedServer) return
     setLoading(true)
     try {
       const isValid = await form.trigger()
@@ -569,6 +573,7 @@ const McpSettingsContent: React.FC<McpSettingsContentProps> = ({ server, updateM
                     checked={server.isActive}
                     key={server.id}
                     loading={loadingServer === server.id}
+                    disabled={isManagedServer}
                     onCheckedChange={onToggleActive}
                   />
                 </Flex>
@@ -610,7 +615,7 @@ const McpSettingsContent: React.FC<McpSettingsContentProps> = ({ server, updateM
           {activeTabValue === 'settings' && (
             <div className="flex min-h-14 shrink-0 items-center border-border-subtle border-t px-6">
               <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
-                {!isEnterpriseMcpServerName(server.name) ? (
+                {!isManagedServer ? (
                   <Button
                     size="sm"
                     variant="ghost"
@@ -622,15 +627,21 @@ const McpSettingsContent: React.FC<McpSettingsContentProps> = ({ server, updateM
                 ) : (
                   <span />
                 )}
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={onSave}
-                  disabled={loading || !isFormChanged}
-                  className="rounded-full">
-                  <SaveIcon size={14} />
-                  {t('common.save')}
-                </Button>
+                {isManagedServer ? (
+                  <span className="text-muted-foreground text-xs" data-testid="mcp-enterprise-readonly-notice">
+                    {t('settings.enterprise.readonly_notice')}
+                  </span>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={onSave}
+                    disabled={loading || !isFormChanged}
+                    className="rounded-full">
+                    <SaveIcon size={14} />
+                    {t('common.save')}
+                  </Button>
+                )}
               </div>
             </div>
           )}

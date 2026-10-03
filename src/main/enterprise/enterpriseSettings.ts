@@ -19,7 +19,7 @@ import fs from 'node:fs'
 
 import { application } from '@application'
 import { loggerService } from '@logger'
-import { atomicWriteFile } from '@main/utils/file/fs'
+import { atomicWriteFile } from '@main/utils/file'
 import { AbsoluteFilePathSchema, type AbsoluteFilePath } from '@shared/types/file'
 
 import type { EnterpriseClientConfig } from './enterpriseConfigTypes'

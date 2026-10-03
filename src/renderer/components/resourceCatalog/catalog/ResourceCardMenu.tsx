@@ -6,6 +6,7 @@ import { Button } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { type CommandContextMenuExtraItem, CommandPopupMenu } from '@renderer/components/command'
 import { useAssistantMutationsById } from '@renderer/hooks/resourceCatalog'
+import { useEnterpriseState } from '@renderer/hooks/useEnterpriseState'
 import { toast } from '@renderer/services/toast'
 import type { ResourceItem } from '@renderer/types/resourceCatalog'
 import { isProtectedBuiltinAgentRole } from '@shared/ai/builtinAgent'
@@ -43,9 +44,15 @@ function useResourceCardMenuItems({
   const [bindingPending, setBindingPending] = useState(false)
   const bindingPendingRef = useRef(false)
 
+  // Enterprise-managed assistants are read-only (config sync owns them):
+  // the mutating menu actions are hidden, mirroring the sidebar rail gating.
+  const { enterpriseState } = useEnterpriseState()
+  const isManagedAssistant =
+    resource.type === 'assistant' && (enterpriseState?.managedAssistantIds ?? []).includes(resource.id)
+
   const { updateAssistant } = useAssistantMutationsById(resource.id)
-  const canAssignGroup = resource.type === 'assistant'
-  const canDuplicate = canDuplicateResource(resource)
+  const canAssignGroup = resource.type === 'assistant' && !isManagedAssistant
+  const canDuplicate = canDuplicateResource(resource) && !isManagedAssistant
   const canExport = resource.type === 'assistant'
   const hasActionsBeforeDelete = canAssignGroup || canDuplicate || canExport
 
@@ -157,7 +164,7 @@ function useResourceCardMenuItems({
     const isOwner = resource.type === 'assistant' || resource.type === 'agent'
     const protectedAgent =
       resource.type === 'agent' && isProtectedBuiltinAgentRole(resource.raw.configuration?.builtin_role)
-    if (isOwner)
+    if (isOwner && !isManagedAssistant)
       items.push({
         type: 'item',
         id: 'archive',
@@ -189,6 +196,7 @@ function useResourceCardMenuItems({
     canDuplicate,
     canExport,
     hasActionsBeforeDelete,
+    isManagedAssistant,
     localGroupId,
     onClose,
     onDelete,

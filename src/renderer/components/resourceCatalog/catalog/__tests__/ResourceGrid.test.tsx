@@ -1177,3 +1177,64 @@ describe('ResourceCardMenu group binding', () => {
     await waitFor(() => expect(onDelete).toHaveBeenLastCalledWith(resource))
   })
 })
+
+describe('Enterprise-managed assistant cards', () => {
+  const managedAssistantId = 'assistant-managed-1'
+
+  beforeEach(() => {
+    // The catalog consults the Enterprise_GetState snapshot (via useEnterpriseState/SWR).
+    vi.stubGlobal('api', {
+      ...window.api,
+      enterprise: {
+        getState: vi.fn().mockResolvedValue({
+          enabled: true,
+          lastAppliedVersion: 1,
+          lastSyncedAt: null,
+          lastError: null,
+          managedProviderIds: [],
+          managedAssistantIds: [managedAssistantId],
+          managedMcpNames: []
+        })
+      }
+    })
+  })
+
+  it('badges the card, keeps the card click inert, and hides the mutating menu actions', async () => {
+    const user = userEvent.setup()
+    const resource = createAssistantResource({ id: managedAssistantId })
+    const onEdit = vi.fn()
+    const onDelete = vi.fn()
+
+    render(
+      <ResourceCard
+        resource={resource}
+        {...getResourceCardProps({ onEdit, onDelete, allGroups: assistantGroups })}
+      />
+    )
+
+    expect(await screen.findByText('common.enterprise_badge')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Assistant' }))
+    expect(onEdit).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: /common.more/ }))
+    expect(screen.queryByRole('button', { name: /library.action.manage_groups/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'library.action.duplicate' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'common.archive' })).not.toBeInTheDocument()
+    // Export is read-only and stays available; nothing was deleted.
+    expect(screen.getByRole('menuitem', { name: 'assistants.presets.export.agent' })).toBeInTheDocument()
+    expect(onDelete).not.toHaveBeenCalled()
+  })
+
+  it('keeps unmanaged assistant cards editable', async () => {
+    const user = userEvent.setup()
+    const resource = createAssistantResource()
+    const onEdit = vi.fn()
+
+    render(<ResourceCard resource={resource} {...getResourceCardProps({ onEdit })} />)
+
+    expect(screen.queryByText('common.enterprise_badge')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Assistant' }))
+    expect(onEdit).toHaveBeenCalledExactlyOnceWith(resource)
+  })
+})
