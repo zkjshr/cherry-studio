@@ -18,6 +18,8 @@ export interface AssistantGroupActionContext {
   deleteAssistantDisabled?: boolean
   deleteTopicsDisabled?: boolean
   disabled?: boolean
+  /** Enterprise-managed assistant: edit/archive entry points are hidden (config sync owns it). */
+  managedAssistant?: boolean
   isGroupGrouping: boolean
   onDeleteAssistant: (assistantId: string) => void | Promise<void>
   onDeleteAllTopics: (assistantId: string) => void | Promise<void>
@@ -37,6 +39,7 @@ const assistantGroupActionRegistry = createActionRegistry<AssistantGroupActionCo
 
 assistantGroupActionRegistry.registerCommand({
   id: 'assistant-group.edit',
+  availability: ({ managedAssistant }) => ({ visible: !managedAssistant }),
   run: ({ assistantId, onEdit }) => {
     onEdit(assistantId)
   }
@@ -73,7 +76,10 @@ assistantGroupActionRegistry.registerCommand({
 
 assistantGroupActionRegistry.registerCommand({
   id: 'assistant-group.archive-assistant',
-  availability: ({ deleteAssistantDisabled }) => ({ enabled: !deleteAssistantDisabled }),
+  availability: ({ deleteAssistantDisabled, managedAssistant }) => ({
+    visible: !managedAssistant,
+    enabled: !deleteAssistantDisabled
+  }),
   run: ({ assistantId, onDeleteAssistant }) => onDeleteAssistant(assistantId)
 })
 

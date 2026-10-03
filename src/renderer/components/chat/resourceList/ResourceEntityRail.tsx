@@ -38,6 +38,8 @@ export type ResourceEntityRailItem = {
   groupName?: string
   groupOrderKey?: string
   trailingAction?: ReactNode
+  /** Small inline marker rendered after the title (e.g. the 「企业」 managed badge). */
+  badge?: ReactNode
 }
 
 // Pinned entities float into a "已固定" section at the top; the rest sit under the "助手" / "智能体"
@@ -226,6 +228,7 @@ export function ResourceEntityRail<T extends ResourceEntityRailItem, TActionCont
           <ResourceList.ItemTitle className={ENTITY_RAIL_TITLE_CLASS} title={item.tooltip ? undefined : item.name}>
             {item.name}
           </ResourceList.ItemTitle>
+          {item.badge}
           {(hasTrailingAction || hasVisibleMenuActions) && (
             // Stop clicks bubbling to the row's onClick: the "more" menu portals its content out of
             // the DOM but React still routes the menu-item click up the React tree (…→ ItemActions →

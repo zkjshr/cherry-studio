@@ -32,6 +32,7 @@ import type {
   LanTransferState
 } from '@shared/types/lanTransfer'
 import type { ShortcutPreferenceKey } from '@shared/types/shortcut'
+import type { EnterpriseStateSnapshot, EnterpriseSyncResult } from '@shared/types/enterprise'
 import type { CommandId } from '@shared/utils/command'
 
 import { ipcApi } from './ipc'
@@ -266,6 +267,11 @@ const api = {
   // All `ai.*` / `translate.*` capability IPC moved to IpcApi (`ipcApi.request(...)` /
   // `ipcApi.on('ai.stream_*')`): model ops, streaming chat + translate, agent-session
   // warm-up, tool approval, agent run-task, and the topic/agent-session auto-rename events.
+  // Enterprise config sync — manual trigger + state snapshot for the settings card and read-only guards
+  enterprise: {
+    sync: (): Promise<EnterpriseSyncResult> => ipcRenderer.invoke(IpcChannel.Enterprise_Sync),
+    getState: (): Promise<EnterpriseStateSnapshot> => ipcRenderer.invoke(IpcChannel.Enterprise_GetState)
+  },
   lanTransfer: {
     startScan: (): Promise<LanTransferState> => ipcRenderer.invoke(IpcChannel.LanTransfer_StartScan),
     stopScan: (): Promise<LanTransferState> => ipcRenderer.invoke(IpcChannel.LanTransfer_StopScan),

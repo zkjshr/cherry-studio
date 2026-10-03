@@ -27,6 +27,7 @@ import { cn } from '@renderer/utils/style'
 import type { UpdateMcpServerDto } from '@shared/data/api/schemas/mcpServers'
 import type { McpServer, McpServerType } from '@shared/data/types/mcpServer'
 import type { McpPrompt, McpResource } from '@shared/types/mcp'
+import { isEnterpriseMcpServerName } from '@shared/utils/enterprise'
 import { isInMemoryBuiltinMcpServer } from '@shared/utils/mcp'
 
 import McpLogsTab from './McpLogsTab'
@@ -609,14 +610,18 @@ const McpSettingsContent: React.FC<McpSettingsContentProps> = ({ server, updateM
           {activeTabValue === 'settings' && (
             <div className="flex min-h-14 shrink-0 items-center border-border-subtle border-t px-6">
               <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => void onDeleteMcpServer()}
-                  className="-ml-2 -mt-1 hover:!bg-destructive hover:!text-destructive-foreground rounded-full text-destructive opacity-60 hover:opacity-100 focus-visible:opacity-100 active:opacity-100">
-                  <DeleteIcon size={14} className="lucide-custom" />
-                  {t('common.delete')}
-                </Button>
+                {!isEnterpriseMcpServerName(server.name) ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => void onDeleteMcpServer()}
+                    className="-ml-2 -mt-1 hover:!bg-destructive hover:!text-destructive-foreground rounded-full text-destructive opacity-60 hover:opacity-100 focus-visible:opacity-100 active:opacity-100">
+                    <DeleteIcon size={14} className="lucide-custom" />
+                    {t('common.delete')}
+                  </Button>
+                ) : (
+                  <span />
+                )}
                 <Button
                   size="sm"
                   variant="default"

@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { Alert, Badge, Button, Switch, Tooltip } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
+import EnterpriseBadge from '@renderer/components/EnterpriseBadge'
 import DeleteIcon from '@renderer/components/icons/DeleteIcon'
 import ContentPopup from '@renderer/components/popups/ContentPopup'
 import { useMcpRuntimeStatus } from '@renderer/hooks/useMcpRuntimeStatus'
@@ -22,6 +23,7 @@ import { formatErrorMessage } from '@renderer/utils/error'
 import { cn } from '@renderer/utils/style'
 import type { UpdateMcpServerDto } from '@shared/data/api/schemas/mcpServers'
 import type { McpServer } from '@shared/data/types/mcpServer'
+import { isEnterpriseMcpServerName } from '@shared/utils/enterprise'
 
 import { isQVerisApiKeyMissing, QVerisApiKeyGuide } from './QVerisApiKeyGuide'
 import { useMcpServerTrust } from './useMcpServerTrust'
@@ -156,8 +158,10 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, onEdit }) => {
   }
 
   const handleRowClick = useCallback(() => {
+    // Enterprise-managed servers are read-only: the row is not an edit entry point.
+    if (isEnterpriseMcpServerName(server.name)) return
     onEdit()
-  }, [onEdit])
+  }, [onEdit, server.name])
 
   const handleToolbarClick = useCallback((event: React.MouseEvent) => {
     event.stopPropagation()
@@ -239,6 +243,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, onEdit }) => {
           <ServerNameText title={server.name} className={server.isActive ? 'text-foreground' : 'text-muted-foreground'}>
             {server.name}
           </ServerNameText>
+          {isEnterpriseMcpServerName(server.name) && <EnterpriseBadge />}
         </ServerNameCell>
 
         <MutedCell>{version || '—'}</MutedCell>

@@ -12,7 +12,8 @@
  *
  * Apply order respects foreign keys: providers+models first, then default
  * models, then MCP servers (assistants reference their ids), then assistants,
- * minapps, and finally the raw `kb_entries` preference row.
+ * minapps, and finally the raw preference rows (`kb_entries`, plus the
+ * managed-assistant id list powering the renderer's read-only guard).
  */
 
 import { and, eq } from 'drizzle-orm'
@@ -34,6 +35,7 @@ import type { UniqueModelId } from '@shared/data/types/model'
 import { createUniqueModelId } from '@shared/data/types/model'
 import type { MiniApp } from '@shared/data/types/miniApp'
 import type { McpServerType } from '@shared/data/types/mcpServer'
+import { ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY } from '@shared/utils/enterprise'
 
 import type {
   EnterpriseAssistantConfig,
@@ -43,6 +45,7 @@ import type {
 import {
   computeModelReconcileDiff,
   sanitizeEnterpriseAppId,
+  toEnterpriseMcpHeaders,
   toEnterpriseUniqueModelId,
   withEnterpriseMcpNamePrefix,
   withEnterprisePrefix
@@ -50,7 +53,7 @@ import {
 
 const logger = loggerService.withContext('EnterpriseConfigApplier')
 
-const KB_ENTRIES_PREFERENCE_SCOPE = 'default'
+const PREFERENCE_SCOPE_DEFAULT = 'default'
 const KB_ENTRIES_PREFERENCE_KEY = 'enterprise.kb_entries'
 const ASSISTANT_LIST_PAGE_SIZE = 500
 
@@ -63,6 +66,7 @@ export interface ApplyEnterpriseConfigResult {
   assistantsApplied: number
   minappsApplied: number
   kbEntriesStored: boolean
+  managedAssistantIdsRecorded: number
 }
 
 /**
@@ -78,15 +82,17 @@ export async function applyEnterpriseConfig(config: EnterpriseClientConfig): Pro
     mcpServersApplied: 0,
     assistantsApplied: 0,
     minappsApplied: 0,
-    kbEntriesStored: false
+    kbEntriesStored: false,
+    managedAssistantIdsRecorded: 0
   }
 
   await applyProvidersAndModels(config, result)
   await applyDefaultModels(config, result)
   await applyMcpServers(config, result)
-  await applyAssistants(config, result)
+  const managedAssistantIds = await applyAssistants(config, result)
   await applyMinapps(config, result)
   await applyKbEntries(config, result)
+  await applyManagedAssistantIds(managedAssistantIds, result)
 
   logger.info('Enterprise config applied', { configVersion: config.config_version, ...result })
   return result
@@ -258,6 +264,8 @@ async function applyMcpServers(config: EnterpriseClientConfig, result: ApplyEnte
       mcpServerService.update(existing.id, {
         type,
         ...(item.base_url !== undefined ? { baseUrl: item.base_url } : {}),
+        // Omitted headers clear stale ones so a re-apply converges fully.
+        headers: toEnterpriseMcpHeaders(item.headers) ?? {},
         isActive: item.is_active ?? true
       })
     } else {
@@ -265,6 +273,7 @@ async function applyMcpServers(config: EnterpriseClientConfig, result: ApplyEnte
         name: withEnterpriseMcpNamePrefix(item.name),
         type,
         ...(item.base_url !== undefined ? { baseUrl: item.base_url } : {}),
+        ...(item.headers !== undefined ? { headers: toEnterpriseMcpHeaders(item.headers) } : {}),
         isActive: item.is_active ?? true
       })
     }
@@ -278,8 +287,14 @@ const MCP_SERVER_TYPES: readonly McpServerType[] = ['stdio', 'sse', 'streamableH
 // Assistants
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function applyAssistants(config: EnterpriseClientConfig, result: ApplyEnterpriseConfigResult): Promise<void> {
-  if ((config.assistants ?? []).length === 0) return
+/**
+ * Apply the assistants section and return the UUID ids of entries marked
+ * `managed: true` (feeding the renderer's read-only guard via the
+ * `enterprise.managed_assistant_ids` preference row).
+ */
+async function applyAssistants(config: EnterpriseClientConfig, result: ApplyEnterpriseConfigResult): Promise<string[]> {
+  const managedAssistantIds: string[] = []
+  if ((config.assistants ?? []).length === 0) return managedAssistantIds
 
   const assistantsByName = await listAllAssistantsByName()
 
@@ -298,6 +313,7 @@ async function applyAssistants(config: EnterpriseClientConfig, result: ApplyEnte
         ...(item.settings !== undefined ? { settings } : {}),
         ...(mcpServerIds !== undefined ? { mcpServerIds } : {})
       })
+      if (item.managed) managedAssistantIds.push(matched.id)
     } else {
       const created = assistantDataService.create({
         name: item.name,
@@ -308,10 +324,13 @@ async function applyAssistants(config: EnterpriseClientConfig, result: ApplyEnte
         ...(item.settings !== undefined ? { settings } : {}),
         ...(mcpServerIds !== undefined ? { mcpServerIds } : {})
       })
+      if (item.managed) managedAssistantIds.push(created.id)
       assistantsByName.set(created.name, created)
     }
     result.assistantsApplied++
   }
+
+  return managedAssistantIds
 }
 
 async function listAllAssistantsByName(): Promise<Map<string, Assistant>> {
@@ -376,29 +395,44 @@ function findMiniAppByAppId(appId: string): MiniApp | null {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// kb_entries
+// Preference rows (kb_entries + managed assistant ids)
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Seeder-style direct preference-row upsert. `PreferenceService.set` rejects
+ * keys outside its schema cache, so the enterprise keys bypass it; rows are
+ * guaranteed to exist via seeding in the declared-key case, but enterprise
+ * keys are dynamic — hence the select-then-insert-or-update in one tx.
+ */
+function upsertUndeclaredPreferenceRow(key: string, value: unknown): void {
+  application.get('DbService').withWriteTx((tx) => {
+    const filter = and(eq(preferenceTable.scope, PREFERENCE_SCOPE_DEFAULT), eq(preferenceTable.key, key))
+    const [existing] = tx.select({ key: preferenceTable.key }).from(preferenceTable).where(filter).limit(1).all()
+    if (existing) {
+      tx.update(preferenceTable).set({ value }).where(filter).run()
+    } else {
+      tx.insert(preferenceTable)
+        .values({ scope: PREFERENCE_SCOPE_DEFAULT, key, value })
+        .run()
+    }
+  })
+}
 
 async function applyKbEntries(config: EnterpriseClientConfig, result: ApplyEnterpriseConfigResult): Promise<void> {
   if (config.kb_entries === undefined) return
 
-  // `enterprise.kb_entries` is not a declared preference key, and
-  // `PreferenceService.set` rejects keys outside its schema cache — store it
-  // seeder-style (direct preference-row upsert, same pattern as
-  // cherryaiDefaultModelSeeder). E3's WeKnora MCP consumes the raw row.
-  application.get('DbService').withWriteTx((tx) => {
-    const filter = and(
-      eq(preferenceTable.scope, KB_ENTRIES_PREFERENCE_SCOPE),
-      eq(preferenceTable.key, KB_ENTRIES_PREFERENCE_KEY)
-    )
-    const [existing] = tx.select({ key: preferenceTable.key }).from(preferenceTable).where(filter).limit(1).all()
-    if (existing) {
-      tx.update(preferenceTable).set({ value: config.kb_entries }).where(filter).run()
-    } else {
-      tx.insert(preferenceTable)
-        .values({ scope: KB_ENTRIES_PREFERENCE_SCOPE, key: KB_ENTRIES_PREFERENCE_KEY, value: config.kb_entries })
-        .run()
-    }
-  })
+  // E3's WeKnora MCP consumes the raw row.
+  upsertUndeclaredPreferenceRow(KB_ENTRIES_PREFERENCE_KEY, config.kb_entries)
   result.kbEntriesStored = true
+}
+
+/**
+ * Record the managed-assistant id list for the renderer's read-only guard.
+ * Replace-whole semantics: every apply rewrites the key from the current
+ * config (empty array when nothing is managed), so ids of assistants the
+ * config stopped managing are dropped on the next sync.
+ */
+async function applyManagedAssistantIds(managedAssistantIds: string[], result: ApplyEnterpriseConfigResult): Promise<void> {
+  upsertUndeclaredPreferenceRow(ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY, managedAssistantIds)
+  result.managedAssistantIdsRecorded = managedAssistantIds.length
 }

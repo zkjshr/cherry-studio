@@ -2,6 +2,7 @@ import path from 'node:path'
 
 import { dialog } from 'electron'
 
+import { application } from '@application'
 import { loggerService } from '@logger'
 import { handleGuarded } from '@main/core/security/guardedIpc'
 import {
@@ -162,6 +163,25 @@ export async function registerIpc() {
   handleGuarded(IpcChannel.Nutstore_GetDirectoryContents, (_, token: string, path: string) =>
     NutstoreService.getDirectoryContents(token, path)
   )
+
+  // enterprise config sync
+  handleGuarded(IpcChannel.Enterprise_Sync, async () => {
+    const enterpriseConfigService = application.get('EnterpriseConfigService')
+    try {
+      await enterpriseConfigService.syncOnce()
+      return { ok: true, state: await enterpriseConfigService.getState() }
+    } catch (error) {
+      // syncOnce is defensive; this catch is the last resort so the renderer
+      // always gets a state snapshot to render.
+      logger.error('Enterprise manual sync failed unexpectedly', error as Error)
+      return {
+        ok: false,
+        state: await enterpriseConfigService.getState(),
+        error: error instanceof Error ? error.message : String(error)
+      }
+    }
+  })
+  handleGuarded(IpcChannel.Enterprise_GetState, () => application.get('EnterpriseConfigService').getState())
 
   // MainWindow_CrashRenderProcess handler moved into MainWindowService (dev-only).
 }

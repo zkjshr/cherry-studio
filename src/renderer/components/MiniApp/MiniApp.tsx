@@ -6,6 +6,7 @@ import { ConfirmDialog, Tooltip } from '@cherrystudio/ui'
 import { cn } from '@cherrystudio/ui/lib/utils'
 import { loggerService } from '@logger'
 import { CommandContextMenu, type CommandContextMenuExtraItem } from '@renderer/components/command'
+import EnterpriseBadge from '@renderer/components/EnterpriseBadge'
 import MiniAppIcon from '@renderer/components/icons/MiniAppIcon'
 import IndicatorLight from '@renderer/components/IndicatorLight'
 import MarqueeText from '@renderer/components/MarqueeText'
@@ -17,6 +18,7 @@ import { ipcApi } from '@renderer/ipc'
 import { toast } from '@renderer/services/toast'
 import { ErrorCode, isDataApiError, toDataApiError } from '@shared/data/api/errors'
 import type { MiniApp, MiniAppStatus } from '@shared/data/types/miniApp'
+import { isEnterpriseMiniAppId } from '@shared/utils/enterprise'
 
 import MiniAppDetailPanel from './MiniAppDetailPanel'
 
@@ -235,7 +237,8 @@ const MiniApp: FC<Props> = ({
       : []),
     // Installed apps also have a null `presetMiniAppId`, but the service refuses to edit
     // or delete them — offering the items would only produce an error toast.
-    ...(app.kind === 'site' && app.presetMiniAppId == null
+    // Enterprise-managed apps (`enterprise-` appId) are read-only: the config sync owns them.
+    ...(app.kind === 'site' && app.presetMiniAppId == null && !isEnterpriseMiniAppId(app.appId)
       ? ([
           ...(onEditCustom
             ? ([
@@ -340,11 +343,12 @@ const MiniApp: FC<Props> = ({
           </Tooltip>
           <div
             className={cn(
-              'w-full select-none text-center text-muted-foreground',
+              'flex w-full select-none text-center text-muted-foreground',
               isLaunchpad
-                ? 'mt-2 min-h-9 max-w-[92px] overflow-hidden whitespace-normal text-[13px] leading-[18px] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [display:-webkit-box] [overflow-wrap:anywhere]'
-                : 'mt-[5px] max-w-20 text-xs leading-normal'
+                ? 'mt-2 min-h-9 max-w-[92px] flex-col items-center overflow-hidden whitespace-normal text-[13px] leading-[18px] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [display:-webkit-box] [overflow-wrap:anywhere]'
+                : 'mt-[5px] max-w-20 flex-col text-xs leading-normal'
             )}>
+            {isEnterpriseMiniAppId(app.appId) && <EnterpriseBadge className="mb-0.5" />}
             {isLaunchpad ? displayName : <MarqueeText>{displayName}</MarqueeText>}
           </div>
         </div>

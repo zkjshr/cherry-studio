@@ -130,7 +130,8 @@ describe('GeneralSettings', () => {
       'settings.proxy.mode.title',
       'settings.models.context_management.title',
       'settings.agent.language.title',
-      'settings.developer.title'
+      'settings.developer.title',
+      'settings.enterprise.title'
     ])
   })
 

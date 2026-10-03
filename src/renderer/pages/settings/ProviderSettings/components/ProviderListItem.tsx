@@ -2,10 +2,12 @@ import { GripVertical, MoreVertical } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { MouseEvent } from 'react'
 
+import EnterpriseBadge from '@renderer/components/EnterpriseBadge'
 import { ProviderAvatar } from '@renderer/pages/settings/ProviderSettings/components/ProviderAvatar'
 import { providerListClasses } from '@renderer/pages/settings/ProviderSettings/primitives/ProviderSettingsPrimitives'
 import { cn } from '@renderer/utils/style'
 import type { Provider } from '@shared/data/types/provider'
+import { isEnterpriseProviderId } from '@shared/utils/enterprise'
 
 interface ProviderListItemProps {
   provider: Provider
@@ -80,6 +82,7 @@ export default function ProviderListItem({
             displayContext="provider-list"
           />
           <span className={providerListClasses.itemLabel}>{provider.name}</span>
+          {isEnterpriseProviderId(provider.id) && <EnterpriseBadge />}
         </div>
       </div>
       {hasTrailingSlot && (

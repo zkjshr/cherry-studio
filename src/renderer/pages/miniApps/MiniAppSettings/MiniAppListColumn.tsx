@@ -3,8 +3,10 @@ import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Scrollbar, Sortable, Tooltip } from '@cherrystudio/ui'
+import EnterpriseBadge from '@renderer/components/EnterpriseBadge'
 import MiniAppLogoAvatar from '@renderer/components/icons/MiniAppLogoAvatar'
 import type { MiniApp } from '@shared/data/types/miniApp'
+import { isEnterpriseMiniAppId } from '@shared/utils/enterprise'
 
 interface Props {
   title: string
@@ -75,6 +77,7 @@ const MiniAppListColumn: FC<Props> = ({ title, count, apps, onToggle, onReorder,
                      */}
                     <MiniAppLogoAvatar logo={app.logoSrc ?? app.logo} size={16} alt="" />
                     <span className="min-w-0 flex-1 truncate text-left text-foreground text-sm">{displayName}</span>
+                    {isEnterpriseMiniAppId(app.appId) && <EnterpriseBadge />}
                     <span
                       className="flex size-6 shrink-0 items-center justify-center text-foreground-tertiary"
                       aria-hidden="true">

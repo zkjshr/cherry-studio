@@ -17,6 +17,7 @@ import {
 import { ENDPOINT_TYPE, type EndpointType, type Model } from '@shared/data/types/model'
 import type { EndpointDialect, Provider } from '@shared/data/types/provider'
 import type { AppEdition } from '@shared/types/appEdition'
+import { isEnterpriseProviderId } from '@shared/utils/enterprise'
 
 import { getLowerBaseModelName, getRawModelId, isFunctionCallingModel, isGeminiModel, isNonChatModel } from './model'
 import { getProviderHostTopology } from './providerTopology'
@@ -138,8 +139,11 @@ export function matchesPreset(provider: Pick<Provider, 'id' | 'presetProviderId'
 /**
  * Canonical preset providers are seeded built-ins whose runtime ID equals the
  * linked preset ID. Preset-derived user providers remain user-manageable.
+ * Enterprise-managed providers (`enterprise-` namespace) are read-only: the
+ * config sync owns their lifecycle.
  */
 export function canManageProvider(provider: Provider): boolean {
+  if (isEnterpriseProviderId(provider.id)) return false
   return provider.presetProviderId == null || provider.presetProviderId !== provider.id
 }
 

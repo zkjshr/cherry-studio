@@ -7,12 +7,24 @@
  */
 
 import { createUniqueModelId, type UniqueModelId } from '@shared/data/types/model'
+import {
+  ENTERPRISE_MCP_NAME_PREFIX,
+  ENTERPRISE_PROVIDER_PREFIX,
+  filterEnterpriseMcpServerNames,
+  isEnterpriseMcpServerName,
+  isEnterpriseMiniAppId,
+  isEnterpriseProviderId
+} from '@shared/utils/enterprise'
 
 /** Forced provider-id namespace for every enterprise-managed provider row. */
-export const ENTERPRISE_PROVIDER_PREFIX = 'enterprise-'
+export { ENTERPRISE_MCP_NAME_PREFIX, ENTERPRISE_PROVIDER_PREFIX }
 
-/** Forced appId namespace for enterprise-managed miniapps (same prefix rule). */
-export const ENTERPRISE_MCP_NAME_PREFIX = '[企业] '
+export {
+  filterEnterpriseMcpServerNames,
+  isEnterpriseMcpServerName,
+  isEnterpriseMiniAppId,
+  isEnterpriseProviderId
+}
 
 /** Legal appId characters — mirrors `MINI_APP_ID_REGEX` in @shared/data/api/schemas/miniApps. */
 const MINI_APP_ID_REGEX = /^[A-Za-z0-9_-]+$/
@@ -48,6 +60,16 @@ export function sanitizeEnterpriseAppId(rawId: string): string {
 /** Display/storage name for an enterprise MCP server, namespaced to avoid colliding with user servers. */
 export function withEnterpriseMcpNamePrefix(name: string): string {
   return `${ENTERPRISE_MCP_NAME_PREFIX}${name}`
+}
+
+/**
+ * Map config `mcp_servers[].headers` onto the `mcp_server.headers` DTO field.
+ * Passes the validated map through verbatim; `undefined` stays `undefined`
+ * (caller decides between "leave unchanged" and an explicit `{}` clear).
+ */
+export function toEnterpriseMcpHeaders(headers: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (headers === undefined) return undefined
+  return { ...headers }
 }
 
 /**

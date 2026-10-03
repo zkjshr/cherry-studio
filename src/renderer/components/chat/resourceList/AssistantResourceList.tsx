@@ -8,6 +8,7 @@ import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import type { ResolvedAction } from '@renderer/components/chat/actions/actionTypes'
 import { deleteConversationOwnerPopup } from '@renderer/components/chat/DeleteConversationOwnerConfirmDialog'
+import EnterpriseBadge from '@renderer/components/EnterpriseBadge'
 import NewConversationIcon from '@renderer/components/icons/NewConversationIcon'
 import SidebarShortcutIcon from '@renderer/components/icons/SidebarShortcutIcon'
 import {
@@ -19,6 +20,7 @@ import { useMutation } from '@renderer/data/hooks/useDataApi'
 import type { AssistantTopicsSource } from '@renderer/hooks/resourceViewSources'
 import { useCloseConversationTabs } from '@renderer/hooks/tab'
 import { useAssistantMutations, useAssistantsApi } from '@renderer/hooks/useAssistant'
+import { useEnterpriseState } from '@renderer/hooks/useEnterpriseState'
 import { useGroupReorder, useGroups } from '@renderer/hooks/useGroups'
 import { usePins } from '@renderer/hooks/usePins'
 import { useSidebarShortcuts } from '@renderer/hooks/useSidebarShortcuts'
@@ -142,6 +144,12 @@ export function AssistantResourceList({
   const [editDialogTarget, setEditDialogTarget] = useState<ResourceEditDialogTarget | null>(null)
   const assistantPinnedIdSet = useMemo(() => new Set(assistantPinnedIds), [assistantPinnedIds])
   const assistantIdSet = useMemo(() => new Set(assistants.map((assistant) => assistant.id)), [assistants])
+  // Enterprise-managed assistants: edit/archive entry points hidden + 「企业」 badge.
+  const { enterpriseState } = useEnterpriseState()
+  const managedAssistantIdSet = useMemo(
+    () => new Set(enterpriseState?.managedAssistantIds ?? []),
+    [enterpriseState]
+  )
   const {
     shortcuts: sidebarShortcuts,
     setPinned: setSidebarShortcutPinned,
@@ -245,6 +253,7 @@ export function AssistantResourceList({
           groupName: group?.name,
           groupOrderKey: group?.orderKey,
           icon,
+          badge: managedAssistantIdSet.has(assistant.id) ? <EnterpriseBadge /> : undefined,
           trailingAction: (
             <Tooltip title={t('chat.conversation.new')} delay={500}>
               <ResourceList.GroupHeaderActionButton
@@ -269,6 +278,7 @@ export function AssistantResourceList({
     defaultModelId,
     handleCreateTopic,
     hasUnlinkedAssistantTopics,
+    managedAssistantIdSet,
     t
   ])
 
@@ -534,13 +544,16 @@ export function AssistantResourceList({
 
       const pinned = assistantPinnedIdSet.has(item.id)
       const sidebarPinned = sidebarAssistantFavoriteIdSet.has(item.id)
+      const isManagedAssistant = managedAssistantIdSet.has(item.id)
 
       return [
         buildResolvedResourceEntityMenuAction({
           id: ASSISTANT_ENTITY_EDIT_ACTION_ID,
           label: t('assistants.edit.title'),
           icon: <Edit3 size={14} />,
-          order: 10
+          order: 10,
+          // Enterprise-managed assistants are read-only: the config sync owns them.
+          availability: { visible: !isManagedAssistant, enabled: true }
         }),
         buildResolvedResourceEntityMenuAction({
           id: ASSISTANT_ENTITY_TOGGLE_PIN_ACTION_ID,
@@ -582,7 +595,7 @@ export function AssistantResourceList({
           icon: <Archive size={14} />,
           group: 'danger',
           order: 30,
-          availability: { visible: true, enabled: deletingAssistantId === null }
+          availability: { visible: !isManagedAssistant && deletingAssistantId === null, enabled: deletingAssistantId === null }
         })
       ]
     },
@@ -593,6 +606,7 @@ export function AssistantResourceList({
       deletingAssistantId,
       isAssistantPinActionDisabled,
       isGroupGrouping,
+      managedAssistantIdSet,
       sidebarAssistantFavoriteIdSet,
       t
     ]

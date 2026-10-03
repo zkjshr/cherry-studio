@@ -27,6 +27,7 @@ import { isValidProxyUrl } from '@renderer/utils/url'
 import { isNonChatModel } from '@shared/utils/model'
 
 import { ContextManagementSettings } from './ContextManagementSettings'
+import EnterpriseSettingsCard from './EnterpriseSettingsCard'
 
 const defaultByPassRules = 'localhost,127.0.0.1,::1'
 
@@ -372,6 +373,8 @@ const GeneralSettings: FC = () => {
           </>
         ) : null}
       </SettingGroup>
+
+      <EnterpriseSettingsCard />
     </SettingsContentColumn>
   )
 }

@@ -140,7 +140,11 @@ export enum IpcChannel {
   LanTransfer_Disconnect = 'lan-transfer:disconnect',
   LanTransfer_ClientEvent = 'lan-transfer:client-event',
   LanTransfer_SendFile = 'lan-transfer:send-file',
-  LanTransfer_CancelTransfer = 'lan-transfer:cancel-transfer'
+  LanTransfer_CancelTransfer = 'lan-transfer:cancel-transfer',
+
+  // Enterprise config sync
+  Enterprise_Sync = 'enterprise:sync',
+  Enterprise_GetState = 'enterprise:get-state'
 
   // ──────────────────────────────────────────────────────────────
   // TODO(v2): the following IPC channels are still referenced via

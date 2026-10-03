@@ -53,6 +53,7 @@ import type { AssistantTopicsSource } from '@renderer/hooks/resourceViewSources'
 import { useCloseConversationTabs, useOptionalTabsContext } from '@renderer/hooks/tab'
 import { useAssistantMutations, useAssistantsApi } from '@renderer/hooks/useAssistant'
 import { useConversationNavigation } from '@renderer/hooks/useConversationNavigation'
+import { useEnterpriseState } from '@renderer/hooks/useEnterpriseState'
 import { useGroupReorder, useGroups } from '@renderer/hooks/useGroups'
 import { useImageCaptureTargets } from '@renderer/hooks/useImageCaptureTargets'
 import { useNotesSettings } from '@renderer/hooks/useNotesSettings'
@@ -196,6 +197,7 @@ function AssistantGroupMoreMenu({
   deleteAssistantDisabled,
   deleteTopicsDisabled,
   disabled,
+  managedAssistant,
   isGroupGrouping,
   pinned,
   sidebarPinned,
@@ -212,6 +214,7 @@ function AssistantGroupMoreMenu({
   deleteAssistantDisabled?: boolean
   deleteTopicsDisabled?: boolean
   disabled?: boolean
+  managedAssistant?: boolean
   isGroupGrouping: boolean
   pinned: boolean
   sidebarPinned: boolean
@@ -230,6 +233,7 @@ function AssistantGroupMoreMenu({
     deleteAssistantDisabled,
     deleteTopicsDisabled,
     disabled,
+    managedAssistant,
     isGroupGrouping,
     onDeleteAssistant,
     onDeleteAllTopics,
@@ -561,6 +565,12 @@ export function Topics({
   const assistantById = useMemo(
     () => new Map(orderedAssistants.map((assistant) => [assistant.id, assistant])),
     [orderedAssistants]
+  )
+  // Enterprise-managed assistants: edit/archive entry points are hidden (config sync owns them).
+  const { enterpriseState } = useEnterpriseState()
+  const managedAssistantIdSet = useMemo(
+    () => new Set(enterpriseState?.managedAssistantIds ?? []),
+    [enterpriseState]
   )
   const assistantGroupById = useMemo(
     () => new Map(assistantGroups.map((group) => [group.id, group] as const)),
@@ -1122,6 +1132,7 @@ export function Topics({
                   !assistantIdsWithTopics.has(assistantGroupId)
                 }
                 disabled={isAssistantPinActionDisabled}
+                managedAssistant={managedAssistantIdSet.has(assistantGroupId)}
                 isGroupGrouping={isGroupGrouping}
                 onDeleteAssistant={handleDeleteAssistant}
                 pinned={assistantPinnedIdSet.has(assistantGroupId)}
@@ -1164,6 +1175,7 @@ export function Topics({
       handleToggleAssistantSidebar,
       isAssistantPinActionDisabled,
       isGroupGrouping,
+      managedAssistantIdSet,
       onNewTopic,
       openAssistantEditor,
       setAssistantIconType,
@@ -1187,6 +1199,7 @@ export function Topics({
         deleteTopicsDisabled:
           deletingAssistantGroupId !== null || deletingAssistantId !== null || !assistantIdsWithTopics.has(assistantId),
         disabled: isAssistantPinActionDisabled,
+        managedAssistant: managedAssistantIdSet.has(assistantId),
         isGroupGrouping,
         onDeleteAssistant: handleDeleteAssistant,
         onDeleteAllTopics: handleDeleteAssistantTopics,
@@ -1219,6 +1232,7 @@ export function Topics({
       handleToggleAssistantSidebar,
       isAssistantPinActionDisabled,
       isGroupGrouping,
+      managedAssistantIdSet,
       openAssistantEditor,
       setAssistantIconType,
       setAssistantSortType,

@@ -1,5 +1,10 @@
+import { and, eq, like } from 'drizzle-orm'
 import { net } from 'electron'
 
+import { application } from '@application'
+import { preferenceTable } from '@data/db/schemas/preference'
+import { userProviderTable } from '@data/db/schemas/userProvider'
+import { mcpServerService } from '@data/services/McpServerService'
 import { loggerService } from '@logger'
 import { BaseService, DependsOn, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { applyEnterpriseConfig } from '@main/enterprise/applyEnterpriseConfig'
@@ -15,11 +20,19 @@ import {
   saveEnterpriseStateSafe
 } from '@main/enterprise/enterpriseSettings'
 import { decideSyncAction } from '@main/enterprise/syncDecider'
+import type { EnterpriseStateSnapshot } from '@shared/types/enterprise'
+import {
+  ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY,
+  ENTERPRISE_PROVIDER_PREFIX,
+  filterEnterpriseMcpServerNames,
+  isEnterpriseProviderId
+} from '@shared/utils/enterprise'
 
 const logger = loggerService.withContext('EnterpriseConfigService')
 
 const SYNC_TIMEOUT_MS = 10_000
 const CLIENT_CONFIG_PATH = '/api/client/config'
+const PREFERENCE_SCOPE_DEFAULT = 'default'
 
 @Injectable('EnterpriseConfigService')
 @ServicePhase(Phase.WhenReady)
@@ -29,6 +42,8 @@ export class EnterpriseConfigService extends BaseService {
   private appliedThisBoot = false
   /** Aborted via registerDisposable when the service stops mid-sync. */
   private inFlightSync: AbortController | null = null
+  /** Shared in-flight sync promise — concurrent callers (boot + renderer) await the same round. */
+  private syncPromise: Promise<void> | null = null
 
   protected async onInit(): Promise<void> {
     this.registerDisposable(() => {
@@ -49,8 +64,37 @@ export class EnterpriseConfigService extends BaseService {
    * One sync round: fetch the server config (ETag-guarded), decide the action,
    * and apply it. Never throws — every branch is recorded to the state file
    * and/or the log instead.
+   *
+   * In-flight dedup: when a sync is already running (e.g. the boot round while
+   * the renderer asks for a manual one), callers share that round instead of
+   * starting a second concurrent fetch.
    */
-  public async syncOnce(): Promise<void> {
+  public syncOnce(): Promise<void> {
+    if (!this.syncPromise) {
+      this.syncPromise = this.runSyncOnce().finally(() => {
+        this.syncPromise = null
+      })
+    }
+    return this.syncPromise
+  }
+
+  /** Assemble the renderer-facing snapshot: sync state + managed resource lists. */
+  public async getState(): Promise<EnterpriseStateSnapshot> {
+    const settings = loadEnterpriseSettings()
+    const state = loadEnterpriseState()
+
+    return {
+      enabled: settings.status === 'enabled',
+      lastAppliedVersion: state.lastAppliedVersion,
+      lastSyncedAt: state.lastSyncedAt,
+      lastError: state.lastError,
+      managedProviderIds: this.listManagedProviderIds(),
+      managedAssistantIds: this.listManagedAssistantIds(),
+      managedMcpNames: filterEnterpriseMcpServerNames(mcpServerService.list({}).items.map((server) => server.name))
+    }
+  }
+
+  private async runSyncOnce(): Promise<void> {
     const settings = loadEnterpriseSettings()
     if (settings.status === 'disabled') {
       logger.info(`Enterprise config sync idle: ${settings.reason}`)
@@ -180,6 +224,31 @@ export class EnterpriseConfigService extends BaseService {
         lastError: `cached apply failed: ${(error as Error).message}`
       })
     }
+  }
+
+  /** Provider ids currently stored in the `enterprise-` namespace. */
+  private listManagedProviderIds(): string[] {
+    const db = application.get('DbService').getDb()
+    const rows = db
+      .select({ providerId: userProviderTable.providerId })
+      .from(userProviderTable)
+      .where(like(userProviderTable.providerId, `${ENTERPRISE_PROVIDER_PREFIX}%`))
+      .all()
+    // LIKE is case-insensitive for ASCII in SQLite — re-filter for exactness.
+    return rows.map((row) => row.providerId).filter(isEnterpriseProviderId)
+  }
+
+  /** Assistant UUIDs recorded by the last apply (`managed: true` entries). */
+  private listManagedAssistantIds(): string[] {
+    const db = application.get('DbService').getDb()
+    const [row] = db
+      .select({ value: preferenceTable.value })
+      .from(preferenceTable)
+      .where(and(eq(preferenceTable.scope, PREFERENCE_SCOPE_DEFAULT), eq(preferenceTable.key, ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY)))
+      .limit(1)
+      .all()
+    if (!Array.isArray(row?.value)) return []
+    return row.value.filter((id): id is string => typeof id === 'string')
   }
 }
 

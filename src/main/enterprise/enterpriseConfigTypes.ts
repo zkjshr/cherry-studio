@@ -53,6 +53,8 @@ export interface EnterpriseMcpServerConfig {
   name: string
   type?: 'stdio' | 'sse' | 'streamableHttp' | 'inMemory'
   base_url?: string
+  /** HTTP headers (e.g. auth tokens) persisted to the mcp_server headers column. */
+  headers?: Record<string, string>
   is_active?: boolean
 }
 
@@ -91,6 +93,21 @@ function asOptionalObject(value: unknown, label: string): Record<string, unknown
   const record = asRecord(value)
   if (!record) throw new Error(`${label} must be an object`)
   return record
+}
+
+/**
+ * Strict header map: every value must be a string — header rows feed straight
+ * into HTTP requests, so a numeric/boolean value is a publish mistake that
+ * should fail validation, not be coerced.
+ */
+function asOptionalHeaders(value: unknown, label: string): Record<string, string> | undefined {
+  if (value === undefined) return undefined
+  const record = asOptionalObject(value, label)
+  if (!record) return undefined
+  for (const [key, headerValue] of Object.entries(record)) {
+    if (typeof headerValue !== 'string') throw new Error(`${label}.${key} must be a string`)
+  }
+  return record as Record<string, string>
 }
 
 function asArraySection(value: unknown, label: string): Record<string, unknown>[] {
@@ -172,10 +189,12 @@ export function validateEnterpriseConfigPayload(payload: unknown): EnterpriseCli
     if (typeof item.name !== 'string' || !item.name.trim()) {
       throw new Error(`mcp_servers[${index}].name must be a non-empty string`)
     }
+    const headers = asOptionalHeaders(item.headers, `mcp_servers[${index}].headers`)
     return {
       name: item.name,
       ...(typeof item.type === 'string' ? { type: item.type as EnterpriseMcpServerConfig['type'] } : {}),
       ...(typeof item.base_url === 'string' ? { base_url: item.base_url } : {}),
+      ...(headers ? { headers } : {}),
       ...(typeof item.is_active === 'boolean' ? { is_active: item.is_active } : {})
     } satisfies EnterpriseMcpServerConfig
   })
