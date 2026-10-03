@@ -1,0 +1,182 @@
+import { net } from 'electron'
+
+import { loggerService } from '@logger'
+import { BaseService, DependsOn, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
+import { applyEnterpriseConfig } from '@main/enterprise/applyEnterpriseConfig'
+import { validateEnterpriseConfigPayload, type EnterpriseClientConfig } from '@main/enterprise/enterpriseConfigTypes'
+import type { EnterpriseSyncState } from '@main/enterprise/enterpriseSettings'
+import {
+  enterpriseCacheExists,
+  loadEnterpriseCache,
+  loadEnterpriseSettings,
+  loadEnterpriseState,
+  saveEnterpriseCache,
+  saveEnterpriseState,
+  saveEnterpriseStateSafe
+} from '@main/enterprise/enterpriseSettings'
+import { decideSyncAction } from '@main/enterprise/syncDecider'
+
+const logger = loggerService.withContext('EnterpriseConfigService')
+
+const SYNC_TIMEOUT_MS = 10_000
+const CLIENT_CONFIG_PATH = '/api/client/config'
+
+@Injectable('EnterpriseConfigService')
+@ServicePhase(Phase.WhenReady)
+@DependsOn(['DbService'])
+export class EnterpriseConfigService extends BaseService {
+  /** Whether a config (remote or cached) has been applied during this boot. */
+  private appliedThisBoot = false
+  /** Aborted via registerDisposable when the service stops mid-sync. */
+  private inFlightSync: AbortController | null = null
+
+  protected async onInit(): Promise<void> {
+    this.registerDisposable(() => {
+      this.inFlightSync?.abort()
+      this.inFlightSync = null
+    })
+  }
+
+  protected async onAllReady(): Promise<void> {
+    // Fire-and-forget: a sync failure must never block or fail boot. syncOnce
+    // itself is defensive, but this outer catch is the last resort.
+    this.syncOnce().catch((error: unknown) => {
+      logger.error('Enterprise config sync failed unexpectedly', error as Error)
+    })
+  }
+
+  /**
+   * One sync round: fetch the server config (ETag-guarded), decide the action,
+   * and apply it. Never throws — every branch is recorded to the state file
+   * and/or the log instead.
+   */
+  public async syncOnce(): Promise<void> {
+    const settings = loadEnterpriseSettings()
+    if (settings.status === 'disabled') {
+      logger.info(`Enterprise config sync idle: ${settings.reason}`)
+      return
+    }
+
+    const state = loadEnterpriseState()
+
+    let response: Response | null = null
+    try {
+      const controller = new AbortController()
+      this.inFlightSync = controller
+      response = await net.fetch(`${settings.serverUrl}${CLIENT_CONFIG_PATH}`, {
+        headers: {
+          'X-Client-Token': settings.token,
+          ...(state.lastAppliedVersion !== null ? { 'If-None-Match': `"${state.lastAppliedVersion}"` } : {})
+        },
+        redirect: 'follow',
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(SYNC_TIMEOUT_MS)])
+      })
+    } catch (error) {
+      logger.warn('Enterprise config fetch failed', error as Error)
+    } finally {
+      this.inFlightSync = null
+    }
+
+    const action = decideSyncAction({
+      httpStatus: response?.status ?? null,
+      etagVersion: parseEtagVersion(response?.headers.get('etag') ?? null),
+      lastAppliedVersion: state.lastAppliedVersion,
+      hasCache: enterpriseCacheExists(),
+      appliedThisBoot: this.appliedThisBoot
+    })
+
+    switch (action) {
+      case 'apply_remote':
+        await this.applyRemoteConfig(response!, state.lastAppliedVersion)
+        return
+      case 'touch': {
+        logger.info('Enterprise config unchanged (304)')
+        await saveEnterpriseStateSafe({ ...state, lastSyncedAt: new Date().toISOString() })
+        return
+      }
+      case 'apply_cache':
+        await this.applyCachedConfig(state)
+        return
+      case 'idle':
+        logger.warn('Enterprise config server unreachable and no fresh apply is possible', {
+          httpStatus: response?.status ?? null
+        })
+    }
+  }
+
+  /** 200 path: validate → cache on disk → apply → record state. */
+  private async applyRemoteConfig(response: Response, previousVersion: number | null): Promise<void> {
+    const syncedAt = new Date().toISOString()
+
+    let config: EnterpriseClientConfig
+    try {
+      config = validateEnterpriseConfigPayload(await response.json())
+    } catch (error) {
+      logger.error('Enterprise config payload rejected', error as Error)
+      await saveEnterpriseStateSafe({
+        lastAppliedVersion: previousVersion,
+        lastSyncedAt: syncedAt,
+        lastError: `invalid payload: ${(error as Error).message}`
+      })
+      return
+    }
+
+    // Cache BEFORE applying: a failed apply still leaves the payload available
+    // for the degraded path on the next boot.
+    try {
+      await saveEnterpriseCache(config)
+    } catch (error) {
+      logger.warn('Failed to persist enterprise config cache', error as Error)
+    }
+
+    try {
+      const result = await applyEnterpriseConfig(config)
+      this.appliedThisBoot = true
+      await saveEnterpriseState({ lastAppliedVersion: config.config_version, lastSyncedAt: syncedAt, lastError: null })
+      logger.info('Enterprise config synced and applied', { configVersion: config.config_version, ...result })
+    } catch (error) {
+      logger.error('Enterprise config apply failed', error as Error)
+      await saveEnterpriseStateSafe({
+        lastAppliedVersion: previousVersion,
+        lastSyncedAt: syncedAt,
+        lastError: `apply failed: ${(error as Error).message}`
+      })
+    }
+  }
+
+  /** Degraded path: server unreachable but nothing applied yet this boot and a cache exists. */
+  private async applyCachedConfig(state: EnterpriseSyncState): Promise<void> {
+    const cached = loadEnterpriseCache()
+    if (!cached) {
+      logger.warn('Enterprise config cache vanished between check and read; skipping degraded apply')
+      return
+    }
+
+    try {
+      const result = await applyEnterpriseConfig(cached)
+      this.appliedThisBoot = true
+      await saveEnterpriseStateSafe({
+        lastAppliedVersion: state.lastAppliedVersion ?? cached.config_version,
+        lastSyncedAt: new Date().toISOString(),
+        lastError: null
+      })
+      logger.warn('Enterprise config applied from cache (degraded; server unreachable)', {
+        configVersion: cached.config_version,
+        ...result
+      })
+    } catch (error) {
+      logger.error('Enterprise cached config apply failed', error as Error)
+      await saveEnterpriseStateSafe({
+        ...state,
+        lastError: `cached apply failed: ${(error as Error).message}`
+      })
+    }
+  }
+}
+
+/** Parse a numeric `"<version>"` ETag header; null when absent or non-numeric. */
+function parseEtagVersion(etag: string | null): number | null {
+  if (!etag) return null
+  const value = Number(etag.replace(/^"|"$/g, ''))
+  return Number.isFinite(value) && value >= 1 ? value : null
+}
