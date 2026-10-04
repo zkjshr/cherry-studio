@@ -34,7 +34,6 @@ import {
   unregisterMigrationIpcHandlers
 } from '@data/migration/v2'
 import { loggerService } from '@logger'
-import { CHERRY_HOME_DIRNAME } from '@main/core/paths/constants'
 import { isDev } from '@main/core/platform'
 import { resolveSystemLanguage, t } from '@main/i18n'
 
@@ -376,7 +375,7 @@ function isEnterpriseDeployment(): boolean {
     }
   }
   try {
-    const userFile = path.join(app.getPath('home'), CHERRY_HOME_DIRNAME, 'config', 'enterprise.json')
+    const userFile = path.join(app.getPath('home'), '.cherrystudio', 'config', 'enterprise.json')
     const enabledFromUserFile = readEnabled(userFile)
     if (enabledFromUserFile !== null) return enabledFromUserFile
     const bundledFile = path.join(app.getAppPath(), 'resources', 'enterprise.default.json')
