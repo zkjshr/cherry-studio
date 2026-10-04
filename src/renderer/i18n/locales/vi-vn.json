@@ -2182,6 +2182,7 @@
   "market.featured": "Đề xuất",
   "market.install": "Cài đặt",
   "market.installFailed": "Cài đặt thất bại",
+  "market.installPartial": "Cài đặt nhưng có lỗi: {{names}}",
   "market.installSuccess": "Cài đặt thành công",
   "market.installed.title": "Đã cài đặt",
   "market.installedBadge": "Đã cài đặt",

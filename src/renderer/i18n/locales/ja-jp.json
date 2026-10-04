@@ -2182,6 +2182,7 @@
   "market.featured": "おすすめ",
   "market.install": "インストール",
   "market.installFailed": "インストールに失敗しました",
+  "market.installPartial": "一部のコンポーネントのインストールに失敗しました：{{names}}",
   "market.installSuccess": "インストールが完了しました",
   "market.installed.title": "インストール済み",
   "market.installedBadge": "インストール済み",

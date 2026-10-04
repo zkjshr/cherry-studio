@@ -2182,6 +2182,7 @@
   "market.featured": "Рекомендуемые",
   "market.install": "Установить",
   "market.installFailed": "Не удалось установить",
+  "market.installPartial": "Установлено с предупреждениями: {{names}}",
   "market.installSuccess": "Установка завершена",
   "market.installed.title": "Установленные",
   "market.installedBadge": "Установлено",

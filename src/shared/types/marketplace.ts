@@ -101,6 +101,18 @@ export type MarketComponentKind = 'skill' | 'mcp_server' | 'assistant' | 'minapp
 
 export type MarketComponentStatus = 'installed' | 'updated' | 'removed' | 'skipped' | 'failed'
 
+/**
+ * Stable (non-localized) reason strings for `status: 'skipped'` outcomes —
+ * renderers may map them to localized copy; the strings themselves are the
+ * contract.
+ */
+export const MARKET_SKIP_REASONS = {
+  /** The target row is enterprise-managed (read-only for the user): never updated, never archived. */
+  managedByEnterprise: 'managed by enterprise',
+  /** The folder exists but belongs to a different origin (e.g. a public-marketplace copy). */
+  foreignOrigin: 'owned by a different install source'
+} as const
+
 export interface MarketComponentResult {
   kind: MarketComponentKind
   /** Skill name / MCP name / assistant name / minapp appId. */
@@ -108,6 +120,8 @@ export interface MarketComponentResult {
   status: MarketComponentStatus
   /** Populated when status is 'failed'. */
   error?: string
+  /** Populated when status is 'skipped' — one of {@link MARKET_SKIP_REASONS}. */
+  reason?: string
 }
 
 export interface MarketInstallResult {
@@ -131,6 +145,14 @@ export interface MarketUninstallResult {
 
 export interface MarketInstalledRefs {
   skillFolderNames: string[]
+  /**
+   * Provenance per skill folder (v2 records): the gateway file URL the skill
+   * was installed from, keyed by folder name. Uninstall compares it against
+   * the live skill's `sourceUrl` so a same-named folder from a different
+   * origin (e.g. a public-marketplace copy) is never deleted. Absent in v1
+   * records — those fall back to source-only ownership checks.
+   */
+  skillSourceUrls: Record<string, string>
   mcpIds: string[]
   assistantIds: string[]
   minappAppIds: string[]
@@ -143,4 +165,12 @@ export interface MarketInstalledRecord {
   version: string
   installedAt: string
   refs: MarketInstalledRefs
+  /**
+   * On-disk record layout version. 1 = the E5 v1 shape (no `skillSourceUrls`),
+   * 2 = adds `skillSourceUrls`. Parsing stays tolerant either way.
+   */
+  schemaVersion?: number
 }
+
+/** Current {@link MarketInstalledRecord.schemaVersion} written by this build. */
+export const MARKET_INSTALLED_RECORD_SCHEMA_VERSION = 2

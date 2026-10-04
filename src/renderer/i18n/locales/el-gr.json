@@ -2182,6 +2182,7 @@
   "market.featured": "Προτεινόμενα",
   "market.install": "Εγκατάσταση",
   "market.installFailed": "Η εγκατάσταση απέτυχε",
+  "market.installPartial": "Εγκαταστάθηκε με προειδοποιήσεις: {{names}}",
   "market.installSuccess": "Η εγκατάσταση ολοκληρώθηκε",
   "market.installed.title": "Εγκατεστημένα",
   "market.installedBadge": "Εγκατεστημένο",

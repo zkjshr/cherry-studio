@@ -13,11 +13,11 @@
 import * as z from 'zod'
 
 import {
-  type MarketCatalogPlugin,
   type MarketCatalogResult,
   type MarketInstalledRecord,
   type MarketInstalledRefs,
   type MarketPluginManifest,
+  MARKET_INSTALLED_RECORD_SCHEMA_VERSION,
   MARKETPLACE_PLUGIN_ID_REGEX
 } from '@shared/types/marketplace'
 
@@ -102,6 +102,8 @@ export const marketplaceManifestSchema = z.object({
 
 const installedRefsSchema = z.object({
   skillFolderNames: z.array(z.string()).catch([]),
+  // v2: folderName → gateway file URL provenance. Absent (→ {}) in v1 records.
+  skillSourceUrls: z.record(z.string(), z.string()).catch({}),
   mcpIds: z.array(z.string()).catch([]),
   assistantIds: z.array(z.string()).catch([]),
   minappAppIds: z.array(z.string()).catch([])
@@ -112,7 +114,9 @@ export const installedRecordSchema = z.object({
   name: z.string().default(''),
   version: z.string().catch(''),
   installedAt: z.string().catch(''),
-  refs: installedRefsSchema
+  refs: installedRefsSchema,
+  // Records written before the v2 refs shape carry no version — treat as 1.
+  schemaVersion: z.number().int().catch(1).default(1)
 })
 
 export const installedRecordFileSchema = z.array(installedRecordSchema)
@@ -150,13 +154,44 @@ export function buildPluginRegistryUrl(serverUrl: string, pluginId: string): str
 }
 
 /**
- * Resolve a catalog icon to a loadable URL: absolute http(s) passes through,
- * anything else (gateway-relative path) goes through the files endpoint.
+ * True for icons the renderer can load directly (absolute http(s) URLs).
+ * Everything else is a gateway-relative path served by the token-gated files
+ * endpoint, which a plain `<img>` cannot fetch — the main process must pull
+ * the bytes and hand over a data: URL instead.
  */
-export function resolveCatalogIconUrl(serverUrl: string, plugin: Pick<MarketCatalogPlugin, 'id' | 'icon'>): string {
-  if (!plugin.icon) return ''
-  if (/^https?:\/\//i.test(plugin.icon)) return plugin.icon
-  return buildPluginFileUrl(serverUrl, plugin.id, plugin.icon)
+export function isHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value)
+}
+
+/** Hard cap for a catalog/manifest icon payload pulled into a data: URL. */
+export const MARKET_ICON_MAX_BYTES = 2 * 1024 * 1024
+
+/** Extension → MIME map for gateways that serve icons as `application/octet-stream`. */
+const ICON_MIME_BY_EXTENSION: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  ico: 'image/x-icon'
+}
+
+/**
+ * Encode fetched icon bytes as a data: URL for the renderer. The MIME type is
+ * taken from the response Content-Type when it is an image type, otherwise
+ * sniffed from the icon file extension. Returns null (caller falls back to the
+ * placeholder icon) for empty/oversized payloads or unrecognized types.
+ */
+export function encodeIconDataUrl(contentType: string | null, fileName: string, bytes: Uint8Array): string | null {
+  if (bytes.length === 0 || bytes.length > MARKET_ICON_MAX_BYTES) return null
+  const headerType = (contentType ?? '').split(';')[0].trim().toLowerCase()
+  const byHeader = headerType.startsWith('image/') ? headerType : null
+  const extension = fileName.includes('.') ? (fileName.split('.').pop() ?? '').toLowerCase() : ''
+  const byExtension = ICON_MIME_BY_EXTENSION[extension] ?? null
+  const mime = byHeader ?? byExtension
+  if (!mime) return null
+  return `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`
 }
 
 /**
@@ -169,14 +204,28 @@ export function buildMarketMinAppId(pluginId: string, entryId: string): string {
   return `market-${sanitize(pluginId)}-${sanitize(entryId)}`
 }
 
+/**
+ * Disambiguated storage name for a marketplace MCP server whose manifest name
+ * collides with a row this plugin does not own (user-created, enterprise, or
+ * another plugin's server). Follows the same `market-<pluginId>` namespacing
+ * idea as {@link buildMarketMinAppId} and the `[企业] ` display convention, so
+ * the user's own server is never touched and the name is stable across
+ * reinstalls (same name + pluginId ⇒ same storage name).
+ */
+export function buildMarketMcpName(name: string, pluginId: string): string {
+  const sanitizedPluginId = pluginId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64)
+  return `${name} [市场 ${sanitizedPluginId}]`
+}
+
 export function emptyMarketRefs(): MarketInstalledRefs {
-  return { skillFolderNames: [], mcpIds: [], assistantIds: [], minappAppIds: [] }
+  return { skillFolderNames: [], skillSourceUrls: {}, mcpIds: [], assistantIds: [], minappAppIds: [] }
 }
 
 /** Union of two ref sets, order-stable (first occurrence wins). */
 export function unionMarketRefs(a: MarketInstalledRefs, b: MarketInstalledRefs): MarketInstalledRefs {
   return {
     skillFolderNames: [...new Set([...a.skillFolderNames, ...b.skillFolderNames])],
+    skillSourceUrls: { ...a.skillSourceUrls, ...b.skillSourceUrls },
     mcpIds: [...new Set([...a.mcpIds, ...b.mcpIds])],
     assistantIds: [...new Set([...a.assistantIds, ...b.assistantIds])],
     minappAppIds: [...new Set([...a.minappAppIds, ...b.minappAppIds])]
@@ -186,6 +235,7 @@ export function unionMarketRefs(a: MarketInstalledRefs, b: MarketInstalledRefs):
 export function marketRefsIsEmpty(refs: MarketInstalledRefs): boolean {
   return (
     refs.skillFolderNames.length === 0 &&
+    Object.keys(refs.skillSourceUrls).length === 0 &&
     refs.mcpIds.length === 0 &&
     refs.assistantIds.length === 0 &&
     refs.minappAppIds.length === 0
@@ -215,4 +265,18 @@ export function mergeInstalledRecord(
 /** Remove a plugin's install record; returns the list unchanged when absent. */
 export function removeInstalledRecord(records: MarketInstalledRecord[], pluginId: string): MarketInstalledRecord[] {
   return records.filter((record) => record.pluginId !== pluginId)
+}
+
+/** Replace one plugin's record in place (used by partial-failure uninstalls). */
+export function replaceInstalledRecord(
+  records: MarketInstalledRecord[],
+  pluginId: string,
+  next: MarketInstalledRecord
+): MarketInstalledRecord[] {
+  return records.map((record) => (record.pluginId === pluginId ? next : record))
+}
+
+/** The schema version stamped on records written by this build. */
+export function installedRecordSchemaVersion(): number {
+  return MARKET_INSTALLED_RECORD_SCHEMA_VERSION
 }

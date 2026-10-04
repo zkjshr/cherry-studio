@@ -2182,6 +2182,7 @@
   "market.featured": "Recommandés",
   "market.install": "Installer",
   "market.installFailed": "Échec de l'installation",
+  "market.installPartial": "Installé avec des avertissements : {{names}}",
   "market.installSuccess": "Installation réussie",
   "market.installed.title": "Installés",
   "market.installedBadge": "Installé",

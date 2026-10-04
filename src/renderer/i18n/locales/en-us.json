@@ -2182,6 +2182,7 @@
   "market.featured": "Featured",
   "market.install": "Install",
   "market.installFailed": "Installation failed",
+  "market.installPartial": "Installed with issues: {{names}}",
   "market.installSuccess": "Installed successfully",
   "market.installed.title": "Installed",
   "market.installedBadge": "Installed",

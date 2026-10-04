@@ -2182,6 +2182,7 @@
   "market.featured": "Öne çıkanlar",
   "market.install": "Yükle",
   "market.installFailed": "Yükleme başarısız oldu",
+  "market.installPartial": "Kısmen yüklendi, sorunlar var: {{names}}",
   "market.installSuccess": "Yükleme başarılı",
   "market.installed.title": "Yüklü",
   "market.installedBadge": "Yüklü",

@@ -317,8 +317,15 @@ const MarketPage: FC = () => {
     async (pluginId: string) => {
       setInstalling(true)
       try {
-        await window.api.market.install(pluginId)
-        toast.success(t('market.installSuccess'))
+        const result = await window.api.market.install(pluginId)
+        // Partial success is still a persisted install — tell the user WHICH
+        // components failed instead of celebrating a clean install.
+        const failed = result.results.filter((entry) => entry.status === 'failed')
+        if (failed.length > 0) {
+          toast.warning(t('market.installPartial', { names: failed.map((entry) => entry.target).join(', ') }))
+        } else {
+          toast.success(t('market.installSuccess'))
+        }
         setJustInstalled(pluginId)
         await refreshInstalled()
       } catch (error) {

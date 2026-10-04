@@ -2182,6 +2182,7 @@
   "market.featured": "推薦",
   "market.install": "安裝",
   "market.installFailed": "安裝失敗",
+  "market.installPartial": "部分元件安裝失敗：{{names}}",
   "market.installSuccess": "安裝成功",
   "market.installed.title": "已安裝",
   "market.installedBadge": "已安裝",

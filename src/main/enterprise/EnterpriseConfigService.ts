@@ -1,8 +1,7 @@
-import { and, eq, like } from 'drizzle-orm'
+import { like } from 'drizzle-orm'
 import { net } from 'electron'
 
 import { application } from '@application'
-import { preferenceTable } from '@data/db/schemas/preference'
 import { userProviderTable } from '@data/db/schemas/userProvider'
 import { mcpServerService } from '@data/services/McpServerService'
 import { loggerService } from '@logger'
@@ -19,10 +18,10 @@ import {
   saveEnterpriseState,
   saveEnterpriseStateSafe
 } from '@main/enterprise/enterpriseSettings'
+import { loadManagedAssistantIds } from '@main/enterprise/managedAssistants'
 import { decideSyncAction } from '@main/enterprise/syncDecider'
 import type { EnterpriseStateSnapshot } from '@shared/types/enterprise'
 import {
-  ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY,
   ENTERPRISE_PROVIDER_PREFIX,
   filterEnterpriseMcpServerNames,
   isEnterpriseProviderId
@@ -32,7 +31,6 @@ const logger = loggerService.withContext('EnterpriseConfigService')
 
 const SYNC_TIMEOUT_MS = 10_000
 const CLIENT_CONFIG_PATH = '/api/client/config'
-const PREFERENCE_SCOPE_DEFAULT = 'default'
 
 @Injectable('EnterpriseConfigService')
 @ServicePhase(Phase.WhenReady)
@@ -240,15 +238,7 @@ export class EnterpriseConfigService extends BaseService {
 
   /** Assistant UUIDs recorded by the last apply (`managed: true` entries). */
   private listManagedAssistantIds(): string[] {
-    const db = application.get('DbService').getDb()
-    const [row] = db
-      .select({ value: preferenceTable.value })
-      .from(preferenceTable)
-      .where(and(eq(preferenceTable.scope, PREFERENCE_SCOPE_DEFAULT), eq(preferenceTable.key, ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY)))
-      .limit(1)
-      .all()
-    if (!Array.isArray(row?.value)) return []
-    return row.value.filter((id): id is string => typeof id === 'string')
+    return loadManagedAssistantIds()
   }
 }
 
