@@ -179,7 +179,7 @@ linux:
   category: Utility
   desktop:
     entry:
-      Name: Cherry Studio
+      Name: TJADKnows Desktop
       StartupWMClass: CherryStudio
   mimeTypes:
     - x-scheme-handler/cherrystudio
@@ -199,7 +199,7 @@ artifactBuildCompleted: scripts/artifact-build-completed.js
 releaseInfo:
   releaseNotes: |
     <!--LANG:en-->
-    Cherry Studio 2.1.4 - New Models, Device Connections, and Bug Fixes
+    TJADKnows Desktop 2.1.4 - New Models, Device Connections, and Bug Fixes
 
     ✨ New Features
     - [Device connections] Connect over reachable LAN or externally configured VPN networks with IPv4/IPv6 support, automatic address prioritization, and manual selection by network interface. Action required: update to a compatible mobile app to save and verify additional addresses and scan pairing codes containing more than 16 addresses.
@@ -258,7 +258,7 @@ releaseInfo:
     - [Provider] Keep model provider list position on enable/disable; show new providers at the top.
 
     <!--LANG:zh-CN-->
-    Cherry Studio 2.1.4 - 新模型、设备连接与问题修复
+    TJADKnows Desktop 2.1.4 - 新模型、设备连接与问题修复
 
     ✨ 新功能
     - [设备连接] 支持通过可达的局域网或自行配置的 VPN 网络连接，支持 IPv4/IPv6、地址自动排序和按网卡手动选择地址。需要操作：更新至兼容的移动端版本，以保存和验证额外连接地址，并扫描包含超过 16 个地址的配对码。
