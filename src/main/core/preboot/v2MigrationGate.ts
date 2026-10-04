@@ -9,7 +9,9 @@
  * keeps no domain files (see core/preboot/README.md, Membership criteria).
  */
 
+import fsSync from 'node:fs'
 import { promises as fs } from 'node:fs'
+import path from 'node:path'
 
 import { app, dialog } from 'electron'
 
@@ -32,6 +34,7 @@ import {
   unregisterMigrationIpcHandlers
 } from '@data/migration/v2'
 import { loggerService } from '@logger'
+import { CHERRY_HOME_DIRNAME } from '@main/core/paths/constants'
 import { isDev } from '@main/core/platform'
 import { resolveSystemLanguage, t } from '@main/i18n'
 
@@ -129,6 +132,16 @@ async function checkMigrationStatus(paths: MigrationPaths, legacyDataConfirmed: 
  * prefix in both file name and exported function name.
  */
 export async function runV2MigrationGate(): Promise<V2MigrationGateResult> {
+  // 企业部署直接跳过本迁移门：改名的全新 userData 叠加机器上残留的官方 Cherry Studio
+  // 旧数据，会被 hasLegacyData() 误判为"从老版本升级"，启动即弹迁移向导（还会把
+  // 用户的个人官方版数据导入企业客户端）。企业版数据一律来自企业配置管线。
+  // preboot 阶段服务未起，这里用纯 fs 探测，判定语义对齐 enterpriseSettings
+  //（用户文件 > 打包默认 > 环境变量），读取失败按非企业处理。
+  if (isEnterpriseDeployment()) {
+    logger.info('enterprise deployment detected; skipping v1->v2 migration gate')
+    return 'skipped'
+  }
+
   // Step 0: Resolve all migration-critical paths, including v1 legacy
   // userData detection. This MUST run before migrationEngine.initialize()
   // so that all subsequent path-dependent operations use the correct
@@ -314,7 +327,7 @@ export async function runV2MigrationGate(): Promise<V2MigrationGateResult> {
       unregisterMigrationIpcHandlers()
       dialog.showErrorBox(
         'Migration Required - Application Cannot Start',
-        `This version of Cherry Studio requires data migration to function properly.\n\nMigration window failed to start: ${(migrationError as Error).message}\n\nThe application will now exit. Please try starting again or contact support if the problem persists.`
+        `This version of TJADKnows Desktop requires data migration to function properly.\n\nMigration window failed to start: ${(migrationError as Error).message}\n\nThe application will now exit. Please try starting again or contact support if the problem persists.`
       )
       logger.error('Exiting application due to failed migration startup')
       application.quit()
@@ -350,4 +363,27 @@ export async function runV2MigrationGate(): Promise<V2MigrationGateResult> {
   }
 
   return 'skipped'
+}
+
+/** preboot 用企业部署探测（纯 fs，不依赖任何服务）：企业模式下跳过 v1 迁移门。 */
+function isEnterpriseDeployment(): boolean {
+  const readEnabled = (file: string): boolean | null => {
+    try {
+      const raw = fsSync.readFileSync(file, 'utf-8')
+      return (JSON.parse(raw) as { enabled?: boolean }).enabled === true
+    } catch {
+      return null
+    }
+  }
+  try {
+    const userFile = path.join(app.getPath('home'), CHERRY_HOME_DIRNAME, 'config', 'enterprise.json')
+    const enabledFromUserFile = readEnabled(userFile)
+    if (enabledFromUserFile !== null) return enabledFromUserFile
+    const bundledFile = path.join(app.getAppPath(), 'resources', 'enterprise.default.json')
+    const enabledFromBundled = readEnabled(bundledFile)
+    if (enabledFromBundled !== null) return enabledFromBundled
+    return Boolean(process.env.CHERRY_ENTERPRISE_SERVER_URL && process.env.CHERRY_ENTERPRISE_TOKEN)
+  } catch {
+    return false
+  }
 }

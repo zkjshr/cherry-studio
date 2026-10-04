@@ -39,6 +39,7 @@ import { toast } from '@renderer/services/toast'
 import { openExternalWebsite } from '@renderer/services/website'
 import { cn } from '@renderer/utils/style'
 import { UpgradeChannel } from '@shared/data/preference/preferenceTypes'
+import { APP_NAME } from '@shared/utils/constants'
 import { DOCTOR_OPEN_QUERY_PARAM, type DoctorPanel } from '@shared/utils/doctor'
 
 const AboutSettings: FC = () => {
@@ -112,7 +113,7 @@ const AboutSettings: FC = () => {
 
   const mailto = async () => {
     const email = 'support@cherry-ai.com'
-    const subject = 'Cherry Studio Feedback'
+    const subject = 'TJADKnows Desktop Feedback'
     const version = (await ipcApi.request('app.get_info')).version
     const platform = window.electron.process.platform
     const url = `mailto:${email}?subject=${subject}&body=%0A%0AVersion: ${version} | Platform: ${platform}`
@@ -247,8 +248,8 @@ const AboutSettings: FC = () => {
             </button>
 
             <div className="flex min-h-18 flex-col items-start justify-center">
-              <div className="mb-1 text-lg font-bold text-foreground">Cherry Studio</div>
-              <div className="text-muted-foreground text-sm">{t('settings.about.description')}</div>
+              <div className="mb-1 text-lg font-bold text-foreground">{APP_NAME}</div>
+              <div className="text-sm text-muted-foreground">{t('settings.about.description')}</div>
               <button
                 type="button"
                 aria-label={t('settings.about.releases.title')}
