@@ -10,6 +10,7 @@ import { computeBackoff } from '@main/core/job/runtime/backoff'
 import { BaseService, DependsOn, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { isWin } from '@main/core/platform'
 import { WindowType } from '@main/core/window/types'
+import { loadEnterpriseSettings } from '@main/enterprise/enterpriseSettings'
 import { regionService } from '@main/services/RegionService'
 import { getAppEdition } from '@main/utils/appEdition'
 import { generateUserAgent, getClientId } from '@main/utils/systemInfo'
@@ -137,6 +138,12 @@ export class AppUpdaterService extends BaseService {
     // Development builds skip automatic checks but still support manual checks.
     // Portable builds do not perform update checks.
     if (!app.isPackaged || this.isPortable()) {
+      return
+    }
+    // 企业模式禁止自动检查上游更新：跟随官方新版会覆盖掉企业定制代码（fork 维护模型），
+    // 企业版本的升级由管理员统一下发安装包。
+    if (loadEnterpriseSettings().status === 'enabled') {
+      logger.info('enterprise mode enabled; skipping upstream auto update checks')
       return
     }
     this.scheduleNextUpdateCheck(INITIAL_CHECK_DELAY_MS)

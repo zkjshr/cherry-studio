@@ -59,6 +59,8 @@ export type ResolvedEnterpriseSettings =
 const CONFIG_FILE_NAME = 'enterprise.json'
 const STATE_FILE_NAME = 'enterprise.state.json'
 const CACHE_FILE_NAME = 'enterprise.cache.json'
+/** 打包内置的部署默认值（resources/ 随 asar 分发）；用户文件不存在时兜底，使安装包开箱即用。 */
+const DEFAULT_CONFIG_RESOURCE = 'enterprise.default.json'
 
 const ENV_SERVER_URL = 'CHERRY_ENTERPRISE_SERVER_URL'
 const ENV_TOKEN = 'CHERRY_ENTERPRISE_TOKEN'
@@ -86,31 +88,38 @@ export function enterpriseCacheExists(): boolean {
 
 /**
  * Read `enterprise.json`, apply the env overrides, and classify the result.
- * A missing file, unparsable JSON, or `enabled: false` yields `disabled` (the
- * service then idles silently — this is the normal case for consumer builds).
+ * Priority: env overrides > user file > bundled default (`resources/enterprise.default.json`,
+ * enterprise builds ship one so installs work out of the box). A missing user file without a
+ * bundled default, unparsable JSON, or `enabled: false` yields `disabled` (the service then
+ * idles silently — this is the normal case for consumer builds).
  */
 export function loadEnterpriseSettings(): ResolvedEnterpriseSettings {
   const filePath = getEnterpriseConfigFilePath()
 
   let raw: string | null = null
+  let rawIsBundled = false
   try {
     raw = fs.readFileSync(filePath, 'utf-8')
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
       return { status: 'disabled', reason: `failed to read ${filePath}: ${String(error)}` }
     }
+    // 用户未建配置文件时回退打包默认值；企业用户手工创建 enterprise.json 即完全接管
+    raw = readBundledDefaultConfig()
+    rawIsBundled = raw !== null
   }
 
   let fileConfig: Partial<EnterpriseSettingsConfig> = {}
   if (raw !== null) {
+    const source = rawIsBundled ? `bundled ${DEFAULT_CONFIG_RESOURCE}` : CONFIG_FILE_NAME
     try {
       const parsed: unknown = JSON.parse(raw)
       if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        return { status: 'disabled', reason: `${CONFIG_FILE_NAME} root is not an object` }
+        return { status: 'disabled', reason: `${source} root is not an object` }
       }
       fileConfig = parsed as Partial<EnterpriseSettingsConfig>
     } catch (error) {
-      return { status: 'disabled', reason: `${CONFIG_FILE_NAME} is not valid JSON: ${String(error)}` }
+      return { status: 'disabled', reason: `${source} is not valid JSON: ${String(error)}` }
     }
   }
 
@@ -123,13 +132,30 @@ export function loadEnterpriseSettings(): ResolvedEnterpriseSettings {
   const enabled = raw !== null ? fileConfig.enabled === true : Boolean(envServerUrl && envToken)
 
   if (!enabled) {
-    return { status: 'disabled', reason: raw === null ? 'config file not found' : 'enabled is false in config file' }
+    return {
+      status: 'disabled',
+      reason:
+        raw === null
+          ? 'config file not found'
+          : rawIsBundled
+            ? 'disabled in bundled default config'
+            : 'enabled is false in config file'
+    }
   }
   if (!serverUrl || !token) {
     return { status: 'disabled', reason: 'serverUrl/token missing (neither file nor env override provides them)' }
   }
 
   return { status: 'enabled', serverUrl: serverUrl.replace(/\/+$/, ''), token }
+}
+
+/** 读打包默认配置；缺失或读不了返回 null（消费版构建没有该文件的正常情况）。 */
+function readBundledDefaultConfig(): string | null {
+  try {
+    return fs.readFileSync(application.getPath('app.root.resources', DEFAULT_CONFIG_RESOURCE), 'utf-8')
+  } catch {
+    return null
+  }
 }
 
 /** Read `enterprise.state.json`; any absence/corruption falls back to defaults. */
