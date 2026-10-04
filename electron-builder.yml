@@ -1,5 +1,5 @@
-appId: com.kangfenmao.CherryStudio
-productName: Cherry Studio
+appId: com.tjad.TJADKnowsDesktop
+productName: TJADKnows Desktop
 extraMetadata:
   cherryEdition: global
 electronLanguages:
@@ -122,7 +122,7 @@ extraResources:
   - from: "packages/provider-registry/data"
     to: "provider-registry"
 win:
-  executableName: Cherry Studio
+  executableName: TJADKnows Desktop
   artifactName: ${productName}-${version}-${arch}-setup.${ext}
   extraResources:
     - from: "node_modules/@aiany/sqlite-vec-windows-${arch}/vec0.dll"
