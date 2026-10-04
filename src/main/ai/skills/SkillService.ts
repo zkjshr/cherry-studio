@@ -20,6 +20,7 @@ import type { SkillCatalogEntry } from '@shared/types/skill'
 import type {
   SkillImportSystemOptions,
   SkillInstallFromDirectoryOptions,
+  SkillInstallFromMarketplaceZipOptions,
   SkillInstallFromZipOptions,
   SkillInstallOptions,
   SkillRemoteUpdateCheck,
@@ -240,6 +241,32 @@ export class SkillService {
       const skillDir = await resolveSkillDirectory(tempDir, null, null)
       await assertSkillDirectoryWithinLimits(skillDir)
       return await this.installSkillDir(skillDir, 'zip', sourceUrl)
+    } finally {
+      await safeRemoveDirectory(tempDir)
+    }
+  }
+
+  /**
+   * Install a skill zip on behalf of the enterprise marketplace (E5).
+   *
+   * Same zip pipeline as {@link installFromZip}, but the skill registers with
+   * source `marketplace` and the gateway file URL as `sourceUrl` provenance.
+   * The stable gateway URL makes reinstall idempotent (same origin ⇒ in-place
+   * update) and lets the marketplace uninstall verify ownership by source.
+   */
+  async installFromMarketplaceZip(options: SkillInstallFromMarketplaceZipOptions): Promise<InstalledSkill> {
+    const { zipFilePath, sourceUrl } = options
+    logger.info('Installing skill from marketplace ZIP', { zipFilePath, sourceUrl })
+
+    await validateZipFile(zipFilePath)
+    const canonicalZipPath = await fs.promises.realpath(zipFilePath)
+    const tempDir = await createTempDir('marketplace-zip-install')
+
+    try {
+      await extractZip(canonicalZipPath, tempDir)
+      const skillDir = await resolveSkillDirectory(tempDir, null, null)
+      await assertSkillDirectoryWithinLimits(skillDir)
+      return await this.installSkillDir(skillDir, 'marketplace', sourceUrl)
     } finally {
       await safeRemoveDirectory(tempDir)
     }

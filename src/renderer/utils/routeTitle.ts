@@ -14,6 +14,7 @@ const routeTitleKeys: Record<string, string> = {
   '/app/launchpad': 'title.launchpad',
   '/app/mini-app': 'title.apps',
   '/app/knowledge': 'title.knowledge',
+  '/app/market': 'market.title',
   '/app/files': 'title.files',
   '/app/code': 'title.code',
   '/app/notes': 'title.notes',

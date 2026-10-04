@@ -194,6 +194,13 @@ export interface SkillInstallFromZipOptions {
   zipFilePath: string
 }
 
+/** Marketplace (E5) zip install: provenance comes from the enterprise gateway. */
+export interface SkillInstallFromMarketplaceZipOptions {
+  zipFilePath: string
+  /** Gateway file URL (`/marketplace/api/plugins/{id}/files/...`) recorded as provenance. */
+  sourceUrl: string
+}
+
 export interface SkillInstallFromDirectoryOptions {
   directoryPath: string
 }

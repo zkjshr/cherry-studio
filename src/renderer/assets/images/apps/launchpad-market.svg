@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="back" x1="22" y1="7" x2="53" y2="47" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E4D5FF"/>
+      <stop offset="1" stop-color="#B79CF5"/>
+    </linearGradient>
+    <linearGradient id="icon" x1="14" y1="12" x2="50" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#BFA1F7"/>
+      <stop offset=".48" stop-color="#9668EE"/>
+      <stop offset="1" stop-color="#7A4BE0"/>
+    </linearGradient>
+  </defs>
+  <path d="M25 6.5h16l11 11v25a4.5 4.5 0 0 1-4.5 4.5h-23A4.5 4.5 0 0 1 20 42.5V11a4.5 4.5 0 0 1 5-4.5Z" fill="url(#back)" fill-opacity=".72"/>
+  <path d="M41 6.5v8a3 3 0 0 0 3 3h8l-11-11Z" fill="#F4EEFE" fill-opacity=".94"/>
+  <path d="M19 11h18l12 12v25a5 5 0 0 1-5 5H19a5 5 0 0 1-5-5V16a5 5 0 0 1 5-5Z" fill="url(#icon)"/>
+  <path d="M37 11v9a3 3 0 0 0 3 3h9L37 11Z" fill="#EDE4FC" fill-opacity=".94"/>
+  <path d="M22 30h20v11a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 22 41V30Z" fill="#fff" fill-opacity=".28"/>
+  <path d="M20.5 24.5h23a2 2 0 0 1 2 2V28a2 2 0 0 1-2 2h-23a2 2 0 0 1-2-2v-1.5a2 2 0 0 1 2-2Z" fill="#fff" fill-opacity=".92"/>
+  <path d="M26 35.5h12M26 39.5h7" stroke="#fff" stroke-opacity=".9" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M25 24.5v-4a7 7 0 0 1 14 0v4" fill="none" stroke="#fff" stroke-opacity=".92" stroke-width="3"/>
+  <path d="M17 18c7-3.5 13.7-3.8 20-1V11H19a5 5 0 0 0-5 5v5.6c.9-1.5 1.9-2.7 3-3.6Z" fill="#fff" fill-opacity=".14"/>
+</svg>

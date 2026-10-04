@@ -11,6 +11,7 @@ import codeToolsIcon from '@renderer/assets/images/apps/launchpad-code-tools.svg
 import dshIcon from '@renderer/assets/images/apps/launchpad-dsh.svg'
 import filesIcon from '@renderer/assets/images/apps/launchpad-files.svg'
 import knowledgeIcon from '@renderer/assets/images/apps/launchpad-knowledge.svg'
+import marketIcon from '@renderer/assets/images/apps/launchpad-market.svg'
 import miniAppIcon from '@renderer/assets/images/apps/launchpad-mini-app.svg'
 import notesIcon from '@renderer/assets/images/apps/launchpad-notes.svg'
 import paintingsIcon from '@renderer/assets/images/apps/launchpad-paintings.svg'
@@ -49,6 +50,7 @@ const APP_ICON_SOURCES: Record<SidebarAppId, string> = {
   translate: translateIcon,
   mini_app: miniAppIcon,
   knowledge: knowledgeIcon,
+  market: marketIcon,
   files: filesIcon,
   code_tools: codeToolsIcon,
   notes: notesIcon
@@ -255,7 +257,7 @@ export default function LaunchpadPage() {
       <button
         type="button"
         onClick={() => openLaunchpadItem(item.id)}
-        className={`${LAUNCHPAD_ITEM_CLASS} group flex cursor-pointer flex-col items-center gap-1 rounded-2xl px-1 py-2 text-center outline-none transition-transform duration-200 hover:scale-105 focus-visible:scale-105 active:scale-95`}>
+        className={`${LAUNCHPAD_ITEM_CLASS} group flex cursor-pointer flex-col items-center gap-1 rounded-2xl px-1 py-2 text-center transition-transform duration-200 outline-none hover:scale-105 focus-visible:scale-105 active:scale-95`}>
         <span className="relative flex size-14 items-center justify-center">
           <span className={APP_ICON_SURFACE_CLASS}>
             <span className={APP_ICON_FRAME_CLASS}>
@@ -263,7 +265,7 @@ export default function LaunchpadPage() {
             </span>
           </span>
         </span>
-        <span className="w-full overflow-hidden text-ellipsis whitespace-nowrap text-[12px] text-foreground">
+        <span className="w-full overflow-hidden text-[12px] text-ellipsis whitespace-nowrap text-foreground">
           {item.text}
         </span>
       </button>
@@ -296,7 +298,7 @@ export default function LaunchpadPage() {
       <Scrollbar className="min-h-0 flex-1">
         <div className="mx-auto flex w-full max-w-180 flex-col gap-5 py-12.5">
           <section className="flex flex-col gap-2">
-            <h2 className="m-0 px-9 py-0 font-semibold text-[14px] text-foreground opacity-80">
+            <h2 className="m-0 px-9 py-0 text-[14px] font-semibold text-foreground opacity-80">
               {t('launchpad.apps')}
             </h2>
             <div className={LAUNCHPAD_GRID_CLASS}>
@@ -314,13 +316,13 @@ export default function LaunchpadPage() {
               <button
                 type="button"
                 onClick={openDeepSeekHarness}
-                className={`${LAUNCHPAD_ITEM_CLASS} group flex cursor-pointer flex-col items-center gap-1 rounded-2xl px-1 py-2 text-center outline-none transition-transform duration-200 hover:scale-105 focus-visible:scale-105 active:scale-95`}>
+                className={`${LAUNCHPAD_ITEM_CLASS} group flex cursor-pointer flex-col items-center gap-1 rounded-2xl px-1 py-2 text-center transition-transform duration-200 outline-none hover:scale-105 focus-visible:scale-105 active:scale-95`}>
                 <span className={APP_ICON_TILE_CLASS}>
                   <span className={APP_ICON_FRAME_CLASS}>
                     <img src={dshIcon} alt="" className={APP_ICON_CLASS} draggable={false} />
                   </span>
                 </span>
-                <span className="w-full overflow-hidden text-ellipsis whitespace-nowrap text-[12px] text-foreground">
+                <span className="w-full overflow-hidden text-[12px] text-ellipsis whitespace-nowrap text-foreground">
                   {t('launchpad.deepseek_harness_shortcut')}
                 </span>
               </button>
@@ -329,7 +331,7 @@ export default function LaunchpadPage() {
 
           {launchpadMiniAppsVisible && (
             <section className="flex flex-col gap-2">
-              <h2 className="m-0 px-9 py-0 font-semibold text-[14px] text-foreground opacity-80">
+              <h2 className="m-0 px-9 py-0 text-[14px] font-semibold text-foreground opacity-80">
                 {t('launchpad.miniApps')}
               </h2>
               <div className={LAUNCHPAD_GRID_CLASS}>

@@ -88,6 +88,10 @@ const SIDEBAR_APP_DEFINITIONS = [
     routePrefix: '/app/knowledge'
   },
   {
+    id: 'market',
+    routePrefix: '/app/market'
+  },
+  {
     id: 'files',
     routePrefix: '/app/files'
   },

@@ -56,7 +56,8 @@ describe('DefaultPreferences', () => {
       'assistants',
       'translate',
       'paintings',
-      'knowledge'
+      'knowledge',
+      'market'
     ].map((resourceId) => {
       const target: SidebarShortcutTarget = {
         kind: 'resource',

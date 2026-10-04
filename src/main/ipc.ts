@@ -13,6 +13,7 @@ import {
 import { hasWritePermission, isPathInside, untildify } from '@main/utils/legacyFile'
 import { IpcChannel } from '@shared/IpcChannel'
 
+import * as marketplaceService from './marketplace/marketplaceService'
 import { copilotService } from './services/CopilotService'
 import { fileStorage as fileManager } from './services/FileStorage'
 import FileService from './services/FileSystemService'
@@ -182,6 +183,15 @@ export async function registerIpc() {
     }
   })
   handleGuarded(IpcChannel.Enterprise_GetState, () => application.get('EnterpriseConfigService').getState())
+
+  // marketplace (E5) — enterprise gateway as the official plugin market
+  handleGuarded(IpcChannel.Market_GetCatalog, () => marketplaceService.getCatalog())
+  handleGuarded(IpcChannel.Market_GetPluginDetail, (_, pluginId: string) =>
+    marketplaceService.getPluginDetail(pluginId)
+  )
+  handleGuarded(IpcChannel.Market_GetInstalled, () => marketplaceService.getInstalled())
+  handleGuarded(IpcChannel.Market_Install, (_, pluginId: string) => marketplaceService.installPlugin(pluginId))
+  handleGuarded(IpcChannel.Market_Uninstall, (_, pluginId: string) => marketplaceService.uninstallPlugin(pluginId))
 
   // MainWindow_CrashRenderProcess handler moved into MainWindowService (dev-only).
 }

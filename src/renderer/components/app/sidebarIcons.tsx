@@ -8,7 +8,8 @@ import {
   MessageSquare,
   MousePointerClick,
   NotepadText,
-  Palette
+  Palette,
+  Store
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -31,6 +32,7 @@ export const SIDEBAR_ICON_COMPONENTS = {
   translate: Languages,
   mini_app: LayoutGrid,
   knowledge: FileSearch,
+  market: Store,
   files: Folder,
   code_tools: CodeMateIcon,
   notes: NotepadText

@@ -16,6 +16,7 @@ import type { TraceDataCursor, TraceDataResult } from '@shared/data/types/trace'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { BackupResult, LocalBackupConfig, S3Config, WebDavConfig } from '@shared/types/backup'
 import type { MenuAnchor, NativePopupMenuModel, NativePopupMenuResult } from '@shared/types/command'
+import type { EnterpriseStateSnapshot, EnterpriseSyncResult } from '@shared/types/enterprise'
 import type {
   AbsoluteFilePath,
   CreateInternalEntryIpcParams,
@@ -31,8 +32,14 @@ import type {
   LanTransferConnectPayload,
   LanTransferState
 } from '@shared/types/lanTransfer'
+import type {
+  MarketCatalogResult,
+  MarketInstalledRecord,
+  MarketInstallResult,
+  MarketPluginManifest,
+  MarketUninstallResult
+} from '@shared/types/marketplace'
 import type { ShortcutPreferenceKey } from '@shared/types/shortcut'
-import type { EnterpriseStateSnapshot, EnterpriseSyncResult } from '@shared/types/enterprise'
 import type { CommandId } from '@shared/utils/command'
 
 import { ipcApi } from './ipc'
@@ -271,6 +278,17 @@ const api = {
   enterprise: {
     sync: (): Promise<EnterpriseSyncResult> => ipcRenderer.invoke(IpcChannel.Enterprise_Sync),
     getState: (): Promise<EnterpriseStateSnapshot> => ipcRenderer.invoke(IpcChannel.Enterprise_GetState)
+  },
+  // Marketplace (E5) — browse/install/uninstall plugins from the enterprise gateway market
+  market: {
+    getCatalog: (): Promise<MarketCatalogResult> => ipcRenderer.invoke(IpcChannel.Market_GetCatalog),
+    getPluginDetail: (pluginId: string): Promise<MarketPluginManifest> =>
+      ipcRenderer.invoke(IpcChannel.Market_GetPluginDetail, pluginId),
+    getInstalled: (): Promise<MarketInstalledRecord[]> => ipcRenderer.invoke(IpcChannel.Market_GetInstalled),
+    install: (pluginId: string): Promise<MarketInstallResult> =>
+      ipcRenderer.invoke(IpcChannel.Market_Install, pluginId),
+    uninstall: (pluginId: string): Promise<MarketUninstallResult> =>
+      ipcRenderer.invoke(IpcChannel.Market_Uninstall, pluginId)
   },
   lanTransfer: {
     startScan: (): Promise<LanTransferState> => ipcRenderer.invoke(IpcChannel.LanTransfer_StartScan),

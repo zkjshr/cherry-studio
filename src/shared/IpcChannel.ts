@@ -144,7 +144,14 @@ export enum IpcChannel {
 
   // Enterprise config sync
   Enterprise_Sync = 'enterprise:sync',
-  Enterprise_GetState = 'enterprise:get-state'
+  Enterprise_GetState = 'enterprise:get-state',
+
+  // Marketplace (E5) — the enterprise gateway as the official plugin market
+  Market_GetCatalog = 'market:get-catalog',
+  Market_GetPluginDetail = 'market:get-plugin-detail',
+  Market_GetInstalled = 'market:get-installed',
+  Market_Install = 'market:install',
+  Market_Uninstall = 'market:uninstall'
 
   // ──────────────────────────────────────────────────────────────
   // TODO(v2): the following IPC channels are still referenced via
