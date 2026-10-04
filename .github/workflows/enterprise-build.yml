@@ -1,0 +1,46 @@
+name: Enterprise Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [enterprise]
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Windows x64 (enterprise)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - name: Enable pnpm (corepack, pinned by packageManager field)
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+
+      - name: Build Windows x64 installer
+        run: |
+          pnpm run build
+          npx electron-builder --win --x64 --publish=never
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-installer
+          path: |
+            dist/*.exe
+            dist/latest.yml
+          if-no-files-found: error
+          retention-days: 30
