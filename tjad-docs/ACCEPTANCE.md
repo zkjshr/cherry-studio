@@ -280,3 +280,9 @@ Release profile（`Cargo.toml`）：`strip = true`、`lto = true`、`opt-level =
 - 详情由小弹层改为页内钻取视图（ZCode 形态）：返回行、56px 图标头部、版本/已装徽标、分类/作者/主页仓库外链、关键词、whitespace-pre-wrap 完整多段介绍、组件分组卡片（计数徽标）、底部固定操作条（安装态机保留：spinner/成功/已装禁用，部分失败 toast）
 - manifest 契约扩展可选 author/homepage/repository/keywords（zod optional，网关原样透传 plugin.json 字段）
 - i18n 35 个 market.* 键 × 13 语言包（+back/author/homepage/viewRepo，-detail.title）；96 测试绿、typecheck 0、eslint 0
+
+### 市场示意插件批量上架（2026-10-05）
+
+- 服务器市场共 6 个插件（全部 valid）：weknora-toolkit（原有）+ 新增 5 个示意——周报与工作汇报助手★（skill+assistant）、EKP 办公小助手★（skill+minapp）、CAD 制图规范速查（skill）、常用入口合集（minapps×2）、AI 使用礼仪（skill）
+- 覆盖全部四类组件与全部分类（knowledge/productivity/utilities/other），featured×3；每个含 icon.svg、多段 description、author/keywords（详情页元信息展示用）
+- 上架 SOP 复核：本地造目录 → scp -r 到 ~/tjad-gateway/gateway/data/marketplace/ → catalog 现扫即生效，零重启
