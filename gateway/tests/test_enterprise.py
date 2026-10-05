@@ -162,7 +162,7 @@ def test_upstream_connectivity_test():
 def test_settings_defaults_merge_and_validation():
     assert client.get("/admin/api/settings", headers=ADMIN).json() == {
         "public_base_url": "http://127.0.0.1:8787", "default_models": {},
-        "kb_entries": {"recent_enabled": False, "kb_ids": []}}
+        "kb_entries": {"recent_enabled": False, "kb_ids": []}, "world_url": ""}
     _put_ok("settings", {"public_base_url": "http://10.1.2.3:8787",
                          "default_models": {"assistant": "gw/m1"},
                          "kb_entries": {"recent_enabled": True, "kb_ids": ["101-x"]}})
@@ -177,8 +177,32 @@ def test_settings_defaults_merge_and_validation():
         {"default_models": {"assistant": 1}},
         {"kb_entries": {"kb_ids": "101"}},                 # kb_ids 非 list
         {"kb_entries": {"recent_enabled": "yes"}},
+        {"world_url": "ftp://world.test"},                 # 非 http(s)
+        {"world_url": 42},                                 # 非字符串
     ]:
         assert client.put("/admin/api/settings", headers=ADMIN, json=bad).status_code == 400, bad
+
+
+def test_world_url_setting_and_client_config_passthrough():
+    """world_url：可空设置键 + 发布组合顶层透出（小世界 W1c 契约）。"""
+    _put_ok("upstreams/gw", _upstream())
+    # 默认未配置：发布内容不含 world_url 键
+    client.post("/admin/api/publish", headers=ADMIN)
+    assert "world_url" not in client.get("/api/client/config", headers=CLIENT).json()
+
+    # 配置后随发布透出；去尾斜杠归一
+    _put_ok("settings", {"world_url": "http://66.12:8788/"})
+    assert client.get("/admin/api/settings", headers=ADMIN).json()["world_url"] == "http://66.12:8788/"
+    client.post("/admin/api/publish", headers=ADMIN)
+    body = client.get("/api/client/config", headers=CLIENT).json()
+    assert body["world_url"] == "http://66.12:8788"
+
+    # None / 空串均视为清空
+    _put_ok("settings", {"world_url": None})
+    assert client.get("/admin/api/settings", headers=ADMIN).json()["world_url"] == ""
+    _put_ok("settings", {"world_url": ""})
+    client.post("/admin/api/publish", headers=ADMIN)
+    assert "world_url" not in client.get("/api/client/config", headers=CLIENT).json()
 
 
 def test_publish_composes_client_config():

@@ -31,11 +31,13 @@ _lock = threading.Lock()
 _conn: sqlite3.Connection | None = None
 _conn_path = ""
 
-# admin_settings 三键的缺省值（GET 返回合并结果；PUT 只更新提供的键，按键合并）
+# admin_settings 四键的缺省值（GET 返回合并结果；PUT 只更新提供的键，按键合并）。
+# world_url：小世界（Three.js 园区）服务地址，空串 = 未部署（客户端不下发该键）。
 _DEFAULT_SETTINGS = {
     "public_base_url": "http://127.0.0.1:8787",
     "default_models": {},
     "kb_entries": {"recent_enabled": False, "kb_ids": []},
+    "world_url": "",
 }
 _DEFAULT_MODEL_ROLES = ("assistant", "translate", "quick_model")
 _MCP_TYPES = ("sse", "streamableHttp")
@@ -384,6 +386,8 @@ def compose_client_config() -> dict:
                          "headers": s["headers"], "is_active": s["is_active"]} for s in list_mcp_servers()],
         "minapps": [{"id": a["id"], "name": a["name"], "url": a["url"]} for a in list_minapps()],
         "kb_entries": st["kb_entries"],
+        # 小世界：仅在配置了地址时顶层透出（客户端未拿到该键即视为未部署）
+        **({"world_url": st["world_url"].rstrip("/")} if st["world_url"].strip() else {}),
     }
 
 
@@ -626,12 +630,18 @@ def _validate_minapp(data: dict) -> dict:
 
 
 def _validate_settings(data: dict) -> dict:
-    """只接受三键（整体读写，按提供的键合并）；返回待存子集。"""
+    """只接受四键（整体读写，按提供的键合并）；返回待存子集。"""
     unknown = set(data) - set(_DEFAULT_SETTINGS)
     if unknown:
         raise HTTPException(status_code=400, detail=f"unknown setting keys: {', '.join(sorted(unknown))}")
     if "public_base_url" in data and not _http_url(data["public_base_url"]):
         raise HTTPException(status_code=400, detail="public_base_url must be an http(s) URL")
+    if "world_url" in data:
+        # 可空：空串/None 表示未部署；否则必须是 http(s) URL
+        world_url = data["world_url"]
+        if world_url is not None and world_url != "" and not _http_url(world_url):
+            raise HTTPException(status_code=400, detail="world_url must be an http(s) URL or empty")
+        data["world_url"] = (world_url or "").strip()
     if "default_models" in data:
         dm = data["default_models"]
         if not isinstance(dm, dict) or not all(
@@ -958,6 +968,12 @@ _ADMIN_HTML = """<!doctype html>
       <button data-action="save-base-url">保存地址</button>
     </div>
     <p class="muted">发布组合里 provider base_url 以它为前缀。</p>
+    <div class="bar">
+      <label for="set-world-url">world_url</label>
+      <input id="set-world-url" placeholder="小世界服务地址（可空），如 http://66.12:8788">
+      <button data-action="save-world-url">保存小世界</button>
+    </div>
+    <p class="muted">非空时随发布透出，客户端侧栏「小世界」开放；留空即下线该入口。</p>
   </div>
   <div class="card">
     <h2>默认模型</h2>
@@ -1293,6 +1309,7 @@ async function loadDefaults() {
   ]);
   UPSTREAMS = upData.upstreams || [];
   $("set-base-url").value = st.public_base_url || "";
+  $("set-world-url").value = st.world_url || "";
   const dm = st.default_models || {};
   for (const [sel, role] of DM_ROLES) $(sel).innerHTML = modelOptions(dm[role] || "");
 }
@@ -1304,6 +1321,15 @@ async function saveBaseUrl() {
   }
   await api("PUT", "/admin/api/settings", { public_base_url: v });
   show("public_base_url 已保存", "ok");
+}
+
+async function saveWorldUrl() {
+  const v = $("set-world-url").value.trim();
+  if (v && !v.startsWith("http://") && !v.startsWith("https://")) {
+    return show("world_url 必须是 http(s) 地址或留空", "err");
+  }
+  await api("PUT", "/admin/api/settings", { world_url: v });
+  show(v ? "world_url 已保存（下次发布透出）" : "world_url 已清空（下次发布后客户端隐藏小世界）", "ok");
 }
 
 async function saveDefaults() {
@@ -1686,6 +1712,7 @@ const ACTIONS = {
   "test-upstream": (el) => run(el, () => testUpstream(el)),
   "del-upstream": (el) => { if (armedConfirm(el, "删除")) run(el, () => deleteUpstream(el.dataset.id)); },
   "save-base-url": (el) => run(el, saveBaseUrl),
+  "save-world-url": (el) => run(el, saveWorldUrl),
   "save-defaults": (el) => run(el, saveDefaults),
   "save-assistant": (el) => run(el, saveAssistant),
   "edit-assistant": (el) => editAssistant(el.dataset.id),
