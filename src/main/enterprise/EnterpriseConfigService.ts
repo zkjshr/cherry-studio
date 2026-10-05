@@ -20,6 +20,7 @@ import {
 } from '@main/enterprise/enterpriseSettings'
 import { loadManagedAssistantIds } from '@main/enterprise/managedAssistants'
 import { decideSyncAction } from '@main/enterprise/syncDecider'
+import { loadEnterpriseWorldUrl } from '@main/enterprise/worldUrl'
 import type { EnterpriseStateSnapshot } from '@shared/types/enterprise'
 import {
   ENTERPRISE_PROVIDER_PREFIX,
@@ -88,7 +89,9 @@ export class EnterpriseConfigService extends BaseService {
       lastError: state.lastError,
       managedProviderIds: this.listManagedProviderIds(),
       managedAssistantIds: this.listManagedAssistantIds(),
-      managedMcpNames: filterEnterpriseMcpServerNames(mcpServerService.list({}).items.map((server) => server.name))
+      managedMcpNames: filterEnterpriseMcpServerNames(mcpServerService.list({}).items.map((server) => server.name)),
+      // 小世界：读 apply 落库的 world_url 行，未配置（无行/空串）→ null
+      worldUrl: loadEnterpriseWorldUrl()
     }
   }
 

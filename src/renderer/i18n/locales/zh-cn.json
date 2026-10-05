@@ -5942,5 +5942,11 @@
   "xlsx_preview.formula_not_evaluated": "公式无法求值",
   "xlsx_preview.sheet_tabs_label": "工作表",
   "xlsx_preview.too_large.description": "文件大小 {{size}} 超过 {{limit}} 的预览大小限制。",
-  "xlsx_preview.too_large.title": "文件过大，无法预览"
+  "xlsx_preview.too_large.title": "文件过大，无法预览",
+  "sidebar.world": "小世界",
+  "settings.world.title": "小世界",
+  "settings.world.sidebar_entry": "在侧栏显示「小世界」入口",
+  "settings.world.description": "小世界是设计院园区风格的 3D 多人空间；客户端保持开启即算在线。未部署时入口页会显示引导说明。",
+  "world.not_configured.title": "小世界尚未开放",
+  "world.not_configured.description": "管理员还没有配置小世界服务的地址。配置发布后重启或重新同步，即可与同事在一个虚拟设计院园区中相聚。"
 }

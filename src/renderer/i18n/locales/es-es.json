@@ -5880,5 +5880,11 @@
   "xlsx_preview.formula_not_evaluated": "No se pudo evaluar la fórmula",
   "xlsx_preview.sheet_tabs_label": "Hojas",
   "xlsx_preview.too_large.description": "El tamaño del archivo {{size}} supera el límite de vista previa de {{limit}}.",
-  "xlsx_preview.too_large.title": "El archivo es demasiado grande para previsualizarlo"
+  "xlsx_preview.too_large.title": "El archivo es demasiado grande para previsualizarlo",
+  "sidebar.world": "Little World",
+  "settings.world.title": "Little World",
+  "settings.world.sidebar_entry": "Mostrar la entrada de Little World en la barra lateral",
+  "settings.world.description": "Little World es un campus 3D multiusuario del instituto; con la aplicación abierta ya cuentas como en línea. Si aún no está desplegado, la página de entrada muestra una guía.",
+  "world.not_configured.title": "Little World aún no está disponible",
+  "world.not_configured.description": "El administrador aún no ha configurado la dirección del servidor de Little World. Cuando se publique, reinicia o vuelve a sincronizar para encontrarte con tus colegas en el campus virtual."
 }

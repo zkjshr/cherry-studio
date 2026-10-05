@@ -27,13 +27,13 @@ import { PowerService } from '@main/core/power/PowerService'
 import { SchedulerService } from '@main/core/scheduler/SchedulerService'
 import { UtilityProcessManager } from '@main/core/utilityProcess/UtilityProcessManager'
 import { WindowManager } from '@main/core/window/WindowManager'
+import { EnterpriseConfigService } from '@main/enterprise/EnterpriseConfigService'
 import { ApiGatewayService } from '@main/features/apiGateway/ApiGatewayService'
 import { BrowserSessionService } from '@main/features/browser'
 import { FileProcessingService, TesseractRuntimeService } from '@main/features/fileProcessing'
 import { KnowledgeService, KnowledgeVectorStoreService } from '@main/features/knowledge'
 import { MiniAppRuntimeService } from '@main/features/miniApp/runtime/MiniAppRuntimeService'
 import { IpcApiService } from '@main/ipc/IpcApiService'
-import { EnterpriseConfigService } from '@main/enterprise/EnterpriseConfigService'
 import { AnalyticsService } from '@main/services/AnalyticsService'
 import { AppMenuService } from '@main/services/AppMenuService'
 import { AppService } from '@main/services/AppService'
@@ -77,6 +77,7 @@ import { TrashService } from '@main/services/trash'
 import { TrayService } from '@main/services/TrayService'
 import { WebSearchService } from '@main/services/webSearch'
 import { WebviewService } from '@main/services/webview'
+import { WorldPresenceService } from '@main/services/WorldPresenceService'
 
 /**
  * Centralized service registry.
@@ -178,6 +179,7 @@ export const services = {
   ApiGatewayService,
   AppUpdaterService,
   EnterpriseConfigService,
+  WorldPresenceService,
   AutoBackupService,
   ProviderRegistryUpdaterService,
   SchedulerService,

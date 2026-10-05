@@ -4,6 +4,7 @@ import {
   Code,
   FileSearch,
   Folder,
+  Globe2,
   Languages,
   LayoutGrid,
   MessageSquare,
@@ -35,6 +36,7 @@ export const SIDEBAR_ICON_COMPONENTS = {
   mini_app: LayoutGrid,
   knowledge: FileSearch,
   market: Store,
+  world: Globe2,
   files: Folder,
   code_tools: CodeMateIcon,
   notes: NotepadText

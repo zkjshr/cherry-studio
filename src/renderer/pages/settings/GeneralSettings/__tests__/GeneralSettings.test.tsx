@@ -131,6 +131,7 @@ describe('GeneralSettings', () => {
       'settings.models.context_management.title',
       'settings.agent.language.title',
       'settings.developer.title',
+      'settings.world.title',
       'settings.enterprise.title'
     ])
   })

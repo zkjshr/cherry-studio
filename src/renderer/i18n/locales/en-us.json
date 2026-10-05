@@ -5942,5 +5942,11 @@
   "xlsx_preview.formula_not_evaluated": "Formula couldn't be evaluated",
   "xlsx_preview.sheet_tabs_label": "Sheets",
   "xlsx_preview.too_large.description": "File size {{size}} exceeds the {{limit}} preview limit.",
-  "xlsx_preview.too_large.title": "File too large to preview"
+  "xlsx_preview.too_large.title": "File too large to preview",
+  "sidebar.world": "Little World",
+  "settings.world.title": "Little World",
+  "settings.world.sidebar_entry": "Show the Little World entry in the sidebar",
+  "settings.world.description": "Little World is a 3D multi-user campus for the institute; keeping the app open counts as being online. If it is not deployed yet, the entry page shows guidance instead.",
+  "world.not_configured.title": "Little World is not available yet",
+  "world.not_configured.description": "Your administrator has not configured the Little World server address yet. Once it is published, restart or re-sync to meet your colleagues in a virtual campus."
 }

@@ -40,6 +40,7 @@ import type {
   MarketUninstallResult
 } from '@shared/types/marketplace'
 import type { ShortcutPreferenceKey } from '@shared/types/shortcut'
+import type { WorldPresenceConfig } from '@shared/types/world'
 import type { CommandId } from '@shared/utils/command'
 
 import { ipcApi } from './ipc'
@@ -278,6 +279,10 @@ const api = {
   enterprise: {
     sync: (): Promise<EnterpriseSyncResult> => ipcRenderer.invoke(IpcChannel.Enterprise_Sync),
     getState: (): Promise<EnterpriseStateSnapshot> => ipcRenderer.invoke(IpcChannel.Enterprise_GetState)
+  },
+  // Little World (小世界，W1c) — webview bootstrap payload for the world page
+  world: {
+    getConfig: (): Promise<WorldPresenceConfig> => ipcRenderer.invoke(IpcChannel.World_GetConfig)
   },
   // Marketplace (E5) — browse/install/uninstall plugins from the enterprise gateway market
   market: {

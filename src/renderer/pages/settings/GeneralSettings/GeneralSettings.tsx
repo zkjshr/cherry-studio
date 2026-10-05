@@ -18,11 +18,13 @@ import {
   SettingsContentColumn,
   SettingTitle
 } from '@renderer/components/SettingsPrimitives'
+import { useSidebarShortcuts } from '@renderer/hooks/useSidebarShortcuts'
 import { useTheme } from '@renderer/hooks/useTheme'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { popup } from '@renderer/services/popup'
 import { toast } from '@renderer/services/toast'
 import { formatErrorMessage } from '@renderer/utils/error'
+import { createSidebarShortcutTarget, SIDEBAR_SHORTCUT_PROVIDER_IDS } from '@renderer/utils/sidebar'
 import { isValidProxyUrl } from '@renderer/utils/url'
 import { isNonChatModel } from '@shared/utils/model'
 
@@ -49,6 +51,11 @@ const GeneralSettings: FC = () => {
   const [launchOnBoot, setLaunchOnBoot] = usePreference('app.launch_on_boot')
   const [trayPreferences, setTrayPreferences] = useMultiplePreferences(TRAY_PREFERENCE_KEYS)
   const { enabled: tray, onClose: trayOnClose, onLaunch: launchToTray } = trayPreferences
+  // 小世界开关：接既有侧栏可见性机制（ui.sidebar_shortcut 的 core.app 置顶项），
+  // 与「设置 → 外观 → 侧栏入口」开关同一存储，不另设 preference。
+  const { isPinned: isSidebarEntryPinned, setPinned: setSidebarEntryPinned } = useSidebarShortcuts()
+  const worldEntryTarget = createSidebarShortcutTarget(SIDEBAR_SHORTCUT_PROVIDER_IDS.APP, 'world')
+  const worldEntryLabel = t('sidebar.world')
   const [preventSleepWhenBusy, setPreventSleepWhenBusy] = usePreference('app.power.prevent_sleep_when_busy')
   const [allowPrivateNetworkFetch, setAllowPrivateNetworkFetch] = usePreference('app.fetch.allow_private_network')
   const [commitAttribution, setCommitAttribution] = usePreference('agent.commit_attribution.enabled')
@@ -364,7 +371,7 @@ const GeneralSettings: FC = () => {
             <SettingRow className="gap-3">
               <SettingRowTitle>{t('settings.developer.client_id')}</SettingRowTitle>
               <div className="flex min-w-0 items-center gap-2">
-                <span className="select-text break-all text-right font-mono text-foreground-tertiary text-xs">
+                <span className="text-right font-mono text-xs break-all text-foreground-tertiary select-text">
                   {clientId}
                 </span>
                 <CopyButton textToCopy={clientId} successFeedback="icon" />
@@ -372,6 +379,22 @@ const GeneralSettings: FC = () => {
             </SettingRow>
           </>
         ) : null}
+      </SettingGroup>
+
+      <SettingGroup theme={theme}>
+        <SettingTitle>{t('settings.world.title')}</SettingTitle>
+        <SettingDivider />
+        <SettingRow id="setting-general-world-sidebar-entry">
+          <SettingRowTitle>{t('settings.world.sidebar_entry')}</SettingRowTitle>
+          <Switch
+            checked={isSidebarEntryPinned(worldEntryTarget)}
+            onCheckedChange={(checked) => setSidebarEntryPinned(worldEntryTarget, checked, worldEntryLabel)}
+          />
+        </SettingRow>
+        <SettingDivider />
+        <SettingRow>
+          <SettingDescription>{t('settings.world.description')}</SettingDescription>
+        </SettingRow>
       </SettingGroup>
 
       <EnterpriseSettingsCard />

@@ -74,10 +74,18 @@ export interface EnterpriseClientConfig {
   minapps?: EnterpriseMinappConfig[]
   /** Knowledge-base entries — stored verbatim for E3 (WeKnora MCP) consumption. */
   kb_entries?: unknown
+  /**
+   * Little World (小世界) service URL. Optional top-level key: the gateway only
+   * emits it when the admin configured a non-empty `world_url`; a dropped key
+   * means "not deployed" and hides the client entry point.
+   */
+  world_url?: string
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
 }
 
 function asStringArray(value: unknown): string[] | undefined {
@@ -121,6 +129,21 @@ function asArraySection(value: unknown, label: string): Record<string, unknown>[
 }
 
 /**
+ * Validate the top-level `world_url`. Present-but-empty is normalized to
+ * `undefined` (same semantics as a dropped key: not deployed); a non-empty
+ * value must be an http(s) URL because it is loaded into a webview and used
+ * as a heartbeat base URL. Returns `undefined` when the key is absent/empty.
+ */
+export function toEnterpriseWorldUrl(value: unknown): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string') throw new Error('world_url must be a string')
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  if (!/^https?:\/\//.test(trimmed)) throw new Error('world_url must be an http(s) URL')
+  return trimmed.replace(/\/+$/, '')
+}
+
+/**
  * Validate a fetched/cached payload into {@link EnterpriseClientConfig}.
  * Throws with an actionable message when the payload is not a usable config —
  * the caller records `lastError` and keeps the previous state.
@@ -140,14 +163,16 @@ export function validateEnterpriseConfigPayload(payload: unknown): EnterpriseCli
     for (const key of ['assistant', 'translate', 'quick_model'] as const) {
       const value = defaultModels[key]
       if (value !== undefined) {
-        if (typeof value !== 'string' || !value.trim()) throw new Error(`default_models.${key} must be a non-empty string`)
+        if (typeof value !== 'string' || !value.trim())
+          throw new Error(`default_models.${key} must be a non-empty string`)
         defaultModelsConfig[key] = value
       }
     }
   }
 
   const providers = asArraySection(root.providers, 'providers').map((item, index) => {
-    if (typeof item.id !== 'string' || !item.id.trim()) throw new Error(`providers[${index}].id must be a non-empty string`)
+    if (typeof item.id !== 'string' || !item.id.trim())
+      throw new Error(`providers[${index}].id must be a non-empty string`)
     const models = asArraySection(item.models, `providers[${index}].models`).map((model, modelIndex) => {
       if (typeof model.id !== 'string' || !model.id.trim()) {
         throw new Error(`providers[${index}].models[${modelIndex}].id must be a non-empty string`)
@@ -200,7 +225,8 @@ export function validateEnterpriseConfigPayload(payload: unknown): EnterpriseCli
   })
 
   const minapps = asArraySection(root.minapps, 'minapps').map((item, index) => {
-    if (typeof item.id !== 'string' || !item.id.trim()) throw new Error(`minapps[${index}].id must be a non-empty string`)
+    if (typeof item.id !== 'string' || !item.id.trim())
+      throw new Error(`minapps[${index}].id must be a non-empty string`)
     if (typeof item.url !== 'string' || !item.url.trim()) {
       throw new Error(`minapps[${index}].url must be a non-empty string`)
     }
@@ -218,6 +244,7 @@ export function validateEnterpriseConfigPayload(payload: unknown): EnterpriseCli
     ...(assistants.length > 0 ? { assistants } : {}),
     ...(mcpServers.length > 0 ? { mcp_servers: mcpServers } : {}),
     ...(minapps.length > 0 ? { minapps } : {}),
-    ...(root.kb_entries !== undefined ? { kb_entries: root.kb_entries } : {})
+    ...(root.kb_entries !== undefined ? { kb_entries: root.kb_entries } : {}),
+    ...(toEnterpriseWorldUrl(root.world_url) !== undefined ? { world_url: toEnterpriseWorldUrl(root.world_url) } : {})
   }
 }

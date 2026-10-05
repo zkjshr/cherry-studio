@@ -97,7 +97,8 @@ describe('sidebar shortcut storage transforms', () => {
       'sidebar-shortcut:core.app:assistants',
       'sidebar-shortcut:core.app:automation',
       'sidebar-shortcut:core.app:knowledge',
-      'sidebar-shortcut:core.app:market'
+      'sidebar-shortcut:core.app:market',
+      'sidebar-shortcut:core.app:world'
     ])
   })
 

@@ -62,6 +62,12 @@ export const entries: SettingsSearchEntry[] = [
     groupKey: 'settings.developer.title'
   },
   {
+    anchorId: 'world-sidebar-entry',
+    titleKey: 'settings.world.sidebar_entry',
+    groupKey: 'settings.world.title',
+    aliases: ['little world', 'world', '小世界', '3D']
+  },
+  {
     anchorId: 'context-max-messages',
     titleKey: 'settings.models.context_management.max_messages',
     groupKey: 'settings.models.context_management.title',

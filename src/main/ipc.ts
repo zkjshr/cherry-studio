@@ -184,6 +184,9 @@ export async function registerIpc() {
   })
   handleGuarded(IpcChannel.Enterprise_GetState, () => application.get('EnterpriseConfigService').getState())
 
+  // Little World (小世界，W1c) — webview bootstrap payload (url/cid/token)
+  handleGuarded(IpcChannel.World_GetConfig, () => application.get('WorldPresenceService').getConfig())
+
   // marketplace (E5) — enterprise gateway as the official plugin market
   handleGuarded(IpcChannel.Market_GetCatalog, () => marketplaceService.getCatalog())
   handleGuarded(IpcChannel.Market_GetPluginDetail, (_, pluginId: string) =>

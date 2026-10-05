@@ -38,13 +38,14 @@ import type { McpServerType } from '@shared/data/types/mcpServer'
 import type { MiniApp } from '@shared/data/types/miniApp'
 import type { UniqueModelId } from '@shared/data/types/model'
 import { createUniqueModelId } from '@shared/data/types/model'
-import { ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY } from '@shared/utils/enterprise'
+import { ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY, ENTERPRISE_WORLD_URL_KEY } from '@shared/utils/enterprise'
 
 import type {
   EnterpriseAssistantConfig,
   EnterpriseClientConfig,
   EnterpriseProviderConfig
 } from './enterpriseConfigTypes'
+import { toEnterpriseWorldUrl } from './enterpriseConfigTypes'
 import {
   computeEnterpriseOnboardingUpdates,
   computeModelReconcileDiff,
@@ -72,6 +73,8 @@ export interface ApplyEnterpriseConfigResult {
   minappsApplied: number
   kbEntriesStored: boolean
   managedAssistantIdsRecorded: number
+  /** `true` when the world_url preference row was rewritten this apply. */
+  worldUrlStored: boolean
 }
 
 /**
@@ -89,7 +92,8 @@ export async function applyEnterpriseConfig(config: EnterpriseClientConfig): Pro
     assistantsApplied: 0,
     minappsApplied: 0,
     kbEntriesStored: false,
-    managedAssistantIdsRecorded: 0
+    managedAssistantIdsRecorded: 0,
+    worldUrlStored: false
   }
 
   await applyProvidersAndModels(config, result)
@@ -100,6 +104,7 @@ export async function applyEnterpriseConfig(config: EnterpriseClientConfig): Pro
   await applyMinapps(config, result)
   await applyKbEntries(config, result)
   await applyManagedAssistantIds(managedAssistantIds, result)
+  await applyWorldUrl(config, result)
 
   logger.info('Enterprise config applied', { configVersion: config.config_version, ...result })
   return result
@@ -463,4 +468,15 @@ async function applyManagedAssistantIds(
 ): Promise<void> {
   upsertUndeclaredPreferenceRow(ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY, managedAssistantIds)
   result.managedAssistantIdsRecorded = managedAssistantIds.length
+}
+
+/**
+ * Record the Little World (小世界) service URL for the state snapshot and the
+ * WorldPresenceService heartbeat. Replace-whole semantics like the managed
+ * assistant ids: a config without `world_url` (or with an empty one) rewrites
+ * the row to `''`, which every reader treats as "not deployed".
+ */
+async function applyWorldUrl(config: EnterpriseClientConfig, result: ApplyEnterpriseConfigResult): Promise<void> {
+  upsertUndeclaredPreferenceRow(ENTERPRISE_WORLD_URL_KEY, toEnterpriseWorldUrl(config.world_url) ?? '')
+  result.worldUrlStored = true
 }

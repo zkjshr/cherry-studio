@@ -142,7 +142,8 @@ vi.mock('@renderer/i18n/label', () => ({
       files: 'Files',
       code_tools: 'Code',
       notes: 'Notes',
-      openclaw: 'OpenClaw'
+      openclaw: 'OpenClaw',
+      world: 'Little World'
     })[key]
 }))
 

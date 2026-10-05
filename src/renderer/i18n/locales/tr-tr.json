@@ -5880,5 +5880,11 @@
   "xlsx_preview.formula_not_evaluated": "Formül değerlendirilemedi",
   "xlsx_preview.sheet_tabs_label": "Sayfalar",
   "xlsx_preview.too_large.description": "{{size}} dosya boyutu, {{limit}} önizleme sınırını aşıyor.",
-  "xlsx_preview.too_large.title": "Dosya önizlenemeyecek kadar büyük"
+  "xlsx_preview.too_large.title": "Dosya önizlenemeyecek kadar büyük",
+  "sidebar.world": "Küçük Dünya",
+  "settings.world.title": "Küçük Dünya",
+  "settings.world.sidebar_entry": "Kenar çubuğunda Küçük Dünya girişini göster",
+  "settings.world.description": "Küçük Dünya, enstitü için 3D çok kullanıcılı bir kampüstür; uygulama açık olduğu sürece çevrimiçi sayılırsınız. Hâlen dağıtılmamışsa giriş sayfası yönlendirme gösterir.",
+  "world.not_configured.title": "Küçük Dünya henüz kullanılamıyor",
+  "world.not_configured.description": "Yöneticiniz henüz Küçük Dünya sunucu adresini yapılandırmadı. Yayınlandıktan sonra yeniden başlatın veya yeniden eşitleyin; sanal kampüste meslektaşlarınızla buluşun."
 }

@@ -5880,5 +5880,11 @@
   "xlsx_preview.formula_not_evaluated": "数式を評価できませんでした",
   "xlsx_preview.sheet_tabs_label": "シート",
   "xlsx_preview.too_large.description": "ファイルサイズ {{size}} はプレビュー上限の {{limit}} を超えています。",
-  "xlsx_preview.too_large.title": "ファイルが大きすぎてプレビューできません"
+  "xlsx_preview.too_large.title": "ファイルが大きすぎてプレビューできません",
+  "sidebar.world": "リトルワールド",
+  "settings.world.title": "リトルワールド",
+  "settings.world.sidebar_entry": "サイドバーに「リトルワールド」を表示",
+  "settings.world.description": "リトルワールドは設計事務所のキャンパスを模した 3D マルチユーザー空間です。アプリを起動しておくだけでオンラインになります。未展開の場合は入り口ページに案内が表示されます。",
+  "world.not_configured.title": "リトルワールドはまだ利用できません",
+  "world.not_configured.description": "管理者がまだリトルワールドサーバーのアドレスを設定していません。公開後、再起動または再同期すると、仮想キャンパスで同僚と集まれます。"
 }

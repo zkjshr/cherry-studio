@@ -116,6 +116,7 @@ export const SIDEBAR_FAVORITES = [
   'mini_app',
   'knowledge',
   'market',
+  'world',
   'files',
   'code_tools',
   'notes',

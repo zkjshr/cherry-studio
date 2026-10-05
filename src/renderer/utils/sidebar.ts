@@ -96,6 +96,10 @@ const SIDEBAR_APP_DEFINITIONS = [
     routePrefix: '/app/market'
   },
   {
+    id: 'world',
+    routePrefix: '/app/world'
+  },
+  {
     id: 'files',
     routePrefix: '/app/files'
   },
@@ -266,7 +270,7 @@ const coreAppShortcutItem = (resourceId: string): SidebarShortcutItem => ({
 })
 
 const LEGACY_DEFAULT_APP_IDS = ['agents', 'assistants', 'translate', 'paintings', 'knowledge', 'market'] as const
-const CURRENT_DEFAULT_APP_IDS = ['agents', 'assistants', 'automation', 'knowledge', 'market'] as const
+const CURRENT_DEFAULT_APP_IDS = ['agents', 'assistants', 'automation', 'knowledge', 'market', 'world'] as const
 
 function itemKeyOf(value: unknown): string {
   if (!isRecord(value)) return ''

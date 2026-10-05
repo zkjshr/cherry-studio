@@ -16,6 +16,12 @@ export interface EnterpriseStateSnapshot {
   managedAssistantIds: string[]
   /** MCP server storage names carrying the `[企业] ` prefix. */
   managedMcpNames: string[]
+  /**
+   * Little World (小世界) service URL from the `enterprise.world_url`
+   * preference; `null` when the gateway has not published a `world_url`
+   * (the client then shows the sidebar guide page instead of the world).
+   */
+  worldUrl: string | null
 }
 
 /** Result of a renderer-triggered `Enterprise_Sync` invocation. */

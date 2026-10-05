@@ -20,6 +20,15 @@ export const ENTERPRISE_MCP_NAME_PREFIX = '[企业] '
 export const ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY = 'enterprise.managed_assistant_ids'
 
 /**
+ * Preference key (scope `default`) holding the Little World (小世界) service URL.
+ * Written by `applyEnterpriseConfig` from the config's top-level `world_url`
+ * (empty string = not deployed); read by the state snapshot and the
+ * WorldPresenceService heartbeat. Shared so main's writer and readers cannot
+ * drift from the gateway's `world_url` contract.
+ */
+export const ENTERPRISE_WORLD_URL_KEY = 'enterprise.world_url'
+
+/**
  * Read-only predicates — deliberately type-tolerant (`typeof` guard) because
  * they run against DB-backed rows that may be corrupt at runtime (e.g. a
  * non-string name crashing an MCP card must fall through as "not managed",

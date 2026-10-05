@@ -5880,5 +5880,11 @@
   "xlsx_preview.formula_not_evaluated": "Die Formel konnte nicht ausgewertet werden",
   "xlsx_preview.sheet_tabs_label": "Tabellenblätter",
   "xlsx_preview.too_large.description": "Die Dateigröße {{size}} überschreitet das Vorschaulimit von {{limit}}.",
-  "xlsx_preview.too_large.title": "Datei zu groß für die Vorschau"
+  "xlsx_preview.too_large.title": "Datei zu groß für die Vorschau",
+  "sidebar.world": "Little World",
+  "settings.world.title": "Little World",
+  "settings.world.sidebar_entry": "Little World in der Seitenleiste anzeigen",
+  "settings.world.description": "Little World ist ein 3D-Mehrnutzer-Campus für das Institut; ein geöffnetes Client zählt als online. Ohne Bereitstellung zeigt die Einstiegsseite Hinweise.",
+  "world.not_configured.title": "Little World ist noch nicht verfügbar",
+  "world.not_configured.description": "Ihr Administrator hat die Adresse des Little-World-Servers noch nicht konfiguriert. Nach der Veröffentlichung können Sie per Neustart oder erneuter Synchronisierung den virtuellen Campus betreten."
 }

@@ -17,6 +17,7 @@ import miniAppIcon from '@renderer/assets/images/apps/launchpad-mini-app.svg'
 import notesIcon from '@renderer/assets/images/apps/launchpad-notes.svg'
 import paintingsIcon from '@renderer/assets/images/apps/launchpad-paintings.svg'
 import translateIcon from '@renderer/assets/images/apps/launchpad-translate.svg'
+import worldIcon from '@renderer/assets/images/apps/launchpad-world.svg'
 import { CommandContextMenu, type CommandContextMenuExtraItem } from '@renderer/components/command'
 import SidebarShortcutIcon from '@renderer/components/icons/SidebarShortcutIcon'
 import App from '@renderer/components/MiniApp/MiniApp'
@@ -53,6 +54,7 @@ const APP_ICON_SOURCES: Record<SidebarAppId, string> = {
   mini_app: miniAppIcon,
   knowledge: knowledgeIcon,
   market: marketIcon,
+  world: worldIcon,
   files: filesIcon,
   code_tools: codeToolsIcon,
   notes: notesIcon

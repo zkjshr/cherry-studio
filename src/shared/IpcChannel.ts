@@ -146,6 +146,9 @@ export enum IpcChannel {
   Enterprise_Sync = 'enterprise:sync',
   Enterprise_GetState = 'enterprise:get-state',
 
+  // Little World (小世界) — webview entry config (W1c)
+  World_GetConfig = 'world:get-config',
+
   // Marketplace (E5) — the enterprise gateway as the official plugin market
   Market_GetCatalog = 'market:get-catalog',
   Market_GetPluginDetail = 'market:get-plugin-detail',

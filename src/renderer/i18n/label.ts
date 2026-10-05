@@ -205,6 +205,7 @@ const sidebarIconKeyMap = {
   mini_app: 'miniApp.title',
   knowledge: 'knowledge.title',
   market: 'market.title',
+  world: 'sidebar.world',
   files: 'files.title',
   code_tools: 'code.title',
   notes: 'notes.title'
