@@ -1,7 +1,7 @@
 {
   "name": {
-    "en-US": "Cherry Assistant",
-    "zh-CN": "Cherry 小助手"
+    "en-US": "TJAD 百事通",
+    "zh-CN": "TJAD 百事通"
   },
   "type": "claude-code",
   "instructions": {

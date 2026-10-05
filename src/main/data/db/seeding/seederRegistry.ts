@@ -12,6 +12,7 @@ import { MiniAppSeeder } from './seeders/miniAppSeeder'
 import { PreferenceSeeder } from './seeders/preferenceSeeder'
 import { PresetProviderSeeder } from './seeders/presetProviderSeeder'
 import { SidebarShortcutMigrationSeeder } from './seeders/sidebarShortcutMigrationSeeder'
+import { TJADBrandRenameSeeder } from './seeders/TJADBrandRenameSeeder'
 import { TranslateLanguageSeeder } from './seeders/translateLanguageSeeder'
 import { WebSearchPreferenceUpgradeSeeder } from './seeders/WebSearchPreferenceUpgradeSeeder'
 
@@ -29,6 +30,7 @@ export const seeders: ISeeder[] = [
   new LegacyFileCleanupPolicySeeder(),
   new CherryAiDefaultModelSeeder(),
   new CherryAssistantSeeder(),
+  new TJADBrandRenameSeeder(),
   new CherrySupportSeeder(),
   new DefaultAssistantSeeder(),
   new LongTextPastePreferenceUpgradeSeeder(),
