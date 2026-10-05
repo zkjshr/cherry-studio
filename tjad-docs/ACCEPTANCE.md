@@ -286,3 +286,12 @@ Release profile（`Cargo.toml`）：`strip = true`、`lto = true`、`opt-level =
 - 服务器市场共 6 个插件（全部 valid）：weknora-toolkit（原有）+ 新增 5 个示意——周报与工作汇报助手★（skill+assistant）、EKP 办公小助手★（skill+minapp）、CAD 制图规范速查（skill）、常用入口合集（minapps×2）、AI 使用礼仪（skill）
 - 覆盖全部四类组件与全部分类（knowledge/productivity/utilities/other），featured×3；每个含 icon.svg、多段 description、author/keywords（详情页元信息展示用）
 - 上架 SOP 复核：本地造目录 → scp -r 到 ~/tjad-gateway/gateway/data/marketplace/ → catalog 现扫即生效，零重启
+
+## 小世界 W1（2026-10-05，三代理并行 + 生产联调）
+
+- world 服务（world/server，Node ESM + node:sqlite + ws）：WS 房间（50 人上限 code 4000）、心跳合并在场名单（scene=true 走动 / scene=false 部门工位坐姿）、near≤8m/all 聊天、静态托管前端；node --test 23 用例 + smoke 全绿
+- Three.js 前端（world/frontend，vite+ts 1429 行）：园区（草坪/道路/主楼/9 部门开放区 54 工位/停车场 20 位+3 车/行道树）、lowpoly 化身（部门色+名牌+行走摆臂+坐姿）、10Hz 同步插值、聊天（头顶气泡+全体频道）、身份填写、满员遮罩；build 零错误
+- 客户端：侧栏「小世界」（市场下方，Globe2，设置→侧栏入口可开关默认展示）、webview 沿用 mini-app 链路（persist:webview 分区）、WorldPresenceService 30s 心跳（客户端开着即在线）、world_url 管理端键→组合配置→偏好→快照全链透传
+- 生产部署（66.12）：网关更新 world_url 契约（v8 已发布 world_url=ZT:8788）；world 服务 ~/tjad-world（start-world.sh，:8788）
+- E2E：客户端心跳 → world health online:1；模拟第二玩家 join/pos/chat → players:2 + 聊天回显 ✓
+- 提交：67de9ba(W1a) 6b5323e(W1b) 62acb28+80f4806(W1c) 已推送
