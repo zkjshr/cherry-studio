@@ -113,6 +113,34 @@ describe('marketplaceCatalogResponseSchema', () => {
     expect(parsed?.plugins[0].components.assistants).toBe(2)
   })
 
+  it('passes through card metadata (department/author) and strips downloads; old gateways omit them', () => {
+    const parsed = parseCatalogResponse({
+      plugins: [
+        {
+          id: 'a',
+          name: 'A',
+          author: '知开始',
+          department: '数字研发中心',
+          // 下载热度仅管理端可见：即便网关误发，schema 也不透传给渲染层
+          downloads: 128,
+          components: { skills: 0, mcp_servers: 0, assistants: 0, minapps: 0 }
+        },
+        {
+          // 旧网关：字段缺失全部按 undefined 解析（UI 侧隐藏胶囊）
+          id: 'b',
+          name: 'B',
+          components: { skills: 0, mcp_servers: 0, assistants: 0, minapps: 0 }
+        }
+      ],
+      warnings: []
+    })
+    expect(parsed).not.toBeNull()
+    expect(parsed?.plugins[0]).toMatchObject({ author: '知开始', department: '数字研发中心' })
+    expect(parsed?.plugins[0]).not.toHaveProperty('downloads')
+    expect(parsed?.plugins[1].author).toBeUndefined()
+    expect(parsed?.plugins[1].department).toBeUndefined()
+  })
+
   it('returns null for a payload without plugins', () => {
     expect(parseCatalogResponse({ nope: true })).toBeNull()
   })

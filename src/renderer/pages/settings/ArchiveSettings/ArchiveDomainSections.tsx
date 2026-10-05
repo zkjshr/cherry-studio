@@ -1,5 +1,5 @@
 import { chunk } from 'es-toolkit'
-import { ListTodo, MessageSquare } from 'lucide-react'
+import { ListTodo, MessageSquare, Palette } from 'lucide-react'
 import type { FC } from 'react'
 import { useMemo } from 'react'
 import useSWR from 'swr'
@@ -279,7 +279,7 @@ export const PaintingArchiveSection: FC<ArchiveDomainSectionProps> = ({
     },
     { onError: (error) => logger.warn('Failed to load archived painting previews', error) }
   )
-  const PaintingIcon = SIDEBAR_ICON_COMPONENTS.paintings
+  const PaintingIcon = Palette
   const items = useMemo<ArchiveItem[]>(
     () =>
       paintings.map((painting) => {
@@ -305,7 +305,7 @@ export const PaintingArchiveSection: FC<ArchiveDomainSectionProps> = ({
 
   return (
     <ArchiveSection
-      icon={SIDEBAR_ICON_COMPONENTS.paintings}
+      icon={Palette}
       batchToolbarContainer={batchToolbarContainer}
       isBatchMode={isBatchMode}
       onBatchAvailabilityChange={onBatchAvailabilityChange}

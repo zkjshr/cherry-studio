@@ -45,8 +45,7 @@ describe('DefaultPreferences', () => {
     const legacyFavorites: PreferenceSchemas['default']['ui.sidebar.favorites'] = [
       { type: 'app', id: 'agents' },
       { type: 'app', id: 'assistants' },
-      { type: 'app', id: 'translate' },
-      { type: 'app', id: 'paintings' },
+      { type: 'app', id: 'automation' },
       { type: 'app', id: 'knowledge' }
     ]
     expect(DefaultPreferences.default['ui.sidebar.favorites']).toEqual(legacyFavorites)
@@ -54,8 +53,7 @@ describe('DefaultPreferences', () => {
     const sidebarShortcutsDefault: PreferenceSchemas['default']['ui.sidebar_shortcut'] = [
       'agents',
       'assistants',
-      'translate',
-      'paintings',
+      'automation',
       'knowledge',
       'market'
     ].map((resourceId) => {

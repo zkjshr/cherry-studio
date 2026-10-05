@@ -1,4 +1,4 @@
-import { ListTodo, MessageSquare } from 'lucide-react'
+import { ListTodo, MessageSquare, Palette } from 'lucide-react'
 import { useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -27,7 +27,7 @@ const DOMAIN_PRESENTATION = {
   assistants: { icon: SIDEBAR_ICON_COMPONENTS.assistants, labelKey: 'settings.data.trash.domain.assistants' },
   agents: { icon: SIDEBAR_ICON_COMPONENTS.agents, labelKey: 'settings.data.trash.domain.agents' },
   sessions: { icon: ListTodo, labelKey: 'settings.data.trash.domain.sessions' },
-  paintings: { icon: SIDEBAR_ICON_COMPONENTS.paintings, labelKey: 'settings.data.trash.domain.paintings' },
+  paintings: { icon: Palette, labelKey: 'settings.data.trash.domain.paintings' },
   files: { icon: SIDEBAR_ICON_COMPONENTS.files, labelKey: 'settings.data.trash.domain.files' }
 } as const
 

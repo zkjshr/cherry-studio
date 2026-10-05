@@ -355,7 +355,8 @@ describe('AppearanceSettings selectors', () => {
     const { container } = render(<AppearanceSettings />)
     const groupTitles = Array.from(container.querySelectorAll('section > h2')).map((heading) => heading.textContent)
 
-    expect(groupTitles.slice(0, 2)).toEqual([
+    expect(groupTitles.slice(0, 3)).toEqual([
+      'settings.sidebarEntries.title',
       'settings.theme.title',
       'settings.general.common.sections.display_language'
     ])

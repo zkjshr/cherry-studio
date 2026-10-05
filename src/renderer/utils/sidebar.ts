@@ -79,6 +79,10 @@ const SIDEBAR_APP_DEFINITIONS = [
     routePrefix: '/app/translate'
   },
   {
+    id: 'automation',
+    routePrefix: '/app/automation'
+  },
+  {
     id: 'mini_app',
     routePrefix: '/app/mini-app',
     exactRouteFocus: true
@@ -249,10 +253,40 @@ function isForwardCompatibleSidebarItem(value: StoredSidebarItem): boolean {
   )
 }
 
+/**
+ * 侧栏应用改版的一次性默认值迁移：已安装用户的 `ui.sidebar_shortcut` 是首次
+ * 运行落库的旧默认值（含 translate/paintings）。应用仍可随时重新置顶这两个
+ * 入口，所以不能按 id 逐项改写（会把用户重新打开的入口劫持成后继）；只对
+ * 「与旧默认快照完全一致」的列表整表换成新默认值，任何用户自定义都原样保留。
+ */
+const coreAppShortcutItem = (resourceId: string): SidebarShortcutItem => ({
+  type: 'shortcut',
+  id: `sidebar-shortcut:${SIDEBAR_SHORTCUT_PROVIDER_IDS.APP}:${resourceId}`,
+  target: { kind: 'resource', locator: { providerId: SIDEBAR_SHORTCUT_PROVIDER_IDS.APP, resourceId } }
+})
+
+const LEGACY_DEFAULT_APP_IDS = ['agents', 'assistants', 'translate', 'paintings', 'knowledge', 'market'] as const
+const CURRENT_DEFAULT_APP_IDS = ['agents', 'assistants', 'automation', 'knowledge', 'market'] as const
+
+function itemKeyOf(value: unknown): string {
+  if (!isRecord(value)) return ''
+  return `${String(value.type)}:${String(value.id)}`
+}
+
+function migrateLegacyDefaultSnapshot(values: readonly unknown[]): SidebarShortcutItem[] | null {
+  const legacyKeys = LEGACY_DEFAULT_APP_IDS.map((id) => `shortcut:sidebar-shortcut:core.app:${id}`)
+  if (values.length !== legacyKeys.length) return null
+  if (values.some((value, index) => itemKeyOf(value) !== legacyKeys[index])) return null
+  return CURRENT_DEFAULT_APP_IDS.map(coreAppShortcutItem)
+}
+
 /** Normalize storage, migrate legacy leaves, and preserve future items. */
 export function normalizeSidebarShortcutItems(values: readonly unknown[] | undefined): SidebarShortcutItem[] {
   const items: SidebarShortcutItem[] = []
   const seen = new Set<string>()
+
+  const snapshot = migrateLegacyDefaultSnapshot(values ?? [])
+  if (snapshot) return snapshot
 
   for (const value of values ?? []) {
     if (!isRecord(value)) continue

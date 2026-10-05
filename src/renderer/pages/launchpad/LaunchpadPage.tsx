@@ -7,6 +7,7 @@ import { Sortable } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import agentsIcon from '@renderer/assets/images/apps/launchpad-agents.svg'
 import assistantsIcon from '@renderer/assets/images/apps/launchpad-assistants.svg'
+import automationIcon from '@renderer/assets/images/apps/launchpad-automation.svg'
 import codeToolsIcon from '@renderer/assets/images/apps/launchpad-code-tools.svg'
 import dshIcon from '@renderer/assets/images/apps/launchpad-dsh.svg'
 import filesIcon from '@renderer/assets/images/apps/launchpad-files.svg'
@@ -48,6 +49,7 @@ const APP_ICON_SOURCES: Record<SidebarAppId, string> = {
   agents: agentsIcon,
   paintings: paintingsIcon,
   translate: translateIcon,
+  automation: automationIcon,
   mini_app: miniAppIcon,
   knowledge: knowledgeIcon,
   market: marketIcon,

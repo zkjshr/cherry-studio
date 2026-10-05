@@ -1,5 +1,6 @@
 import type { LucideProps } from 'lucide-react'
 import {
+  CalendarClock,
   Code,
   FileSearch,
   Folder,
@@ -30,6 +31,7 @@ export const SIDEBAR_ICON_COMPONENTS = {
   agents: MousePointerClick,
   paintings: Palette,
   translate: Languages,
+  automation: CalendarClock,
   mini_app: LayoutGrid,
   knowledge: FileSearch,
   market: Store,

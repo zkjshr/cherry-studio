@@ -76,11 +76,37 @@ describe('sidebar shortcut storage transforms', () => {
   it('uses the first built-in app shortcut as the startup destination', () => {
     const stored = [
       shortcut('core.mini-app', 'mini-1'),
-      shortcut('core.app', 'paintings'),
+      shortcut('core.app', 'automation'),
       shortcut('core.app', 'assistants')
     ]
 
-    expect(getSidebarDefaultLandingUrl(stored, 'openai')).toBe('/app/paintings/openai')
-    expect(getSidebarDefaultLandingUrl([shortcut('core.mini-app', 'mini-1')], 'openai')).toBe('')
+    expect(getSidebarDefaultLandingUrl(stored, 'openai')).toBe('/app/automation')
+    // Unknown app ids are skipped; paintings/translate stay valid (toggleable apps).
+    expect(
+      getSidebarDefaultLandingUrl([shortcut('core.app', 'gone-app'), shortcut('core.mini-app', 'mini-1')], 'openai')
+    ).toBe('')
+  })
+
+  it('swaps the frozen legacy default snapshot for the new default once', () => {
+    // 与旧默认值完全一致的列表 → 整表换成新默认（translate/paintings 换成 automation）
+    const legacy = ['agents', 'assistants', 'translate', 'paintings', 'knowledge', 'market'].map((id) =>
+      shortcut('core.app', id)
+    )
+    expect(normalizeSidebarShortcutItems(legacy).map((item) => item.id)).toEqual([
+      'sidebar-shortcut:core.app:agents',
+      'sidebar-shortcut:core.app:assistants',
+      'sidebar-shortcut:core.app:automation',
+      'sidebar-shortcut:core.app:knowledge',
+      'sidebar-shortcut:core.app:market'
+    ])
+  })
+
+  it('leaves customized lists alone, including re-enabled translate/paintings pins', () => {
+    // 用户自定义过（与旧默认快照不一致）→ 原样保留，重新置顶的入口不被劫持
+    const customized = [shortcut('core.app', 'agents'), shortcut('core.app', 'translate')]
+    expect(normalizeSidebarShortcutItems(customized).map((item) => item.id)).toEqual([
+      'sidebar-shortcut:core.app:agents',
+      'sidebar-shortcut:core.app:translate'
+    ])
   })
 })

@@ -41,6 +41,7 @@ import useUserTheme from '@renderer/hooks/useUserTheme'
 import { appLanguageOptions, isAppLanguage } from '@renderer/i18n/languages'
 import i18n from '@renderer/i18n/resolver'
 import { ipcApi } from '@renderer/ipc'
+import SidebarEntrySettings from '@renderer/pages/settings/AppearanceSettings/SidebarEntrySettings'
 import { popup } from '@renderer/services/popup'
 import { toast } from '@renderer/services/toast'
 import { formatErrorMessage } from '@renderer/utils/error'
@@ -334,6 +335,7 @@ const AppearanceSettings: FC = () => {
 
   return (
     <SettingsContentColumn theme={theme} innerClassName="[&>*+*]:mt-8">
+      <SidebarEntrySettings />
       <SettingGroup theme={theme}>
         <SettingTitle>{t('settings.theme.title')}</SettingTitle>
         <SettingDivider />

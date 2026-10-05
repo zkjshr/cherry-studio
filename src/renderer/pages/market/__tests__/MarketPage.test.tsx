@@ -108,6 +108,7 @@ describe('MarketPage detail drill-in', () => {
       ...manifest,
       description: '第一段介绍\n第二段介绍',
       author: '知开始',
+      department: '数字研发中心',
       homepage: 'https://example.com',
       repository: 'https://github.com/example/p1',
       keywords: ['rag', 'kb']
@@ -119,7 +120,9 @@ describe('MarketPage detail drill-in', () => {
     // action in the sticky bar.
     expect(await screen.findByRole('heading', { name: 'P1' })).toBeInTheDocument()
     expect(screen.getByText(/第一段介绍/)).toBeInTheDocument()
-    expect(screen.getByText(/market\.detail\.author/)).toBeInTheDocument()
+    // 部门/作者/热度胶囊在详情头部渲染（作者不再是纯文本行）。
+    expect(screen.getByText('数字研发中心')).toBeInTheDocument()
+    expect(screen.getByText('知开始')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'market.detail.homepage' })).toHaveAttribute('href', 'https://example.com')
     expect(screen.getByRole('link', { name: 'market.detail.viewRepo' })).toHaveAttribute(
       'href',
@@ -276,8 +279,92 @@ describe('MarketPage category collapse', () => {
     expect(document.querySelectorAll('[data-ui="market.card"]').length).toBe(8)
     fireEvent.click(screen.getByText('market.showLess'))
     expect(document.querySelectorAll('[data-ui="market.card"]').length).toBe(6)
-    expect(screen.getByText('market.viewMore')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('market.viewMore'))
+    expect(screen.getByText(/market\.viewMore/)).toBeInTheDocument()
+    fireEvent.click(screen.getByText(/market\.viewMore/))
     expect(document.querySelectorAll('[data-ui="market.card"]').length).toBe(8)
+  })
+})
+
+describe('MarketPage card metadata', () => {
+  it('renders department/author capsules and the decorated icon container on cards', async () => {
+    marketApi.getCatalog.mockResolvedValue({
+      source: 'gateway',
+      plugins: [{ ...catalogEntry, department: '数字研发中心', author: '知开始' }],
+      warnings: []
+    })
+    render(<MarketPage />)
+    await screen.findByText('P1', { selector: '[data-ui="market.card"] span' })
+    expect(screen.getByText('数字研发中心')).toBeInTheDocument()
+    expect(screen.getByText('知开始')).toBeInTheDocument()
+    // ZCode 图标形态：外层装饰容器 + 2/3 尺寸图形。
+    const icon = document.querySelector('[data-ui="market.plugin-icon"]')
+    expect(icon).not.toBeNull()
+    expect(icon?.querySelector('img')?.getAttribute('width')).toBe('27') // Math.round(40 * 2/3)
+  })
+
+  it('hides every capsule when the plugin.json metadata is absent', async () => {
+    render(<MarketPage />)
+    await screen.findByText('P1', { selector: '[data-ui="market.card"] span' })
+    expect(document.querySelector('[data-ui="market.plugin-tags"]')).toBeNull()
+  })
+})
+
+describe('MarketPage manage view', () => {
+  it('opens from the strip gear, lists records with component badges, and returns to the grid', async () => {
+    marketApi.getInstalled.mockResolvedValue([
+      installedRecord({
+        refs: {
+          skillFolderNames: ['s1', 's2'],
+          skillSourceUrls: {},
+          mcpIds: ['m1'],
+          assistantIds: ['a1'],
+          minappAppIds: []
+        }
+      })
+    ])
+    render(<MarketPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'market.manageInstalled' }))
+    // Row metadata: heading with count badge, install date label, component badges.
+    expect(await screen.findByRole('heading', { name: /market\.manage\.title/ })).toBeInTheDocument()
+    expect(screen.getByText(/market\.manage\.installedAt/)).toBeInTheDocument()
+    expect(screen.getByText('2 market.component.skill')).toBeInTheDocument()
+    expect(screen.getByText('1 market.component.mcp_server')).toBeInTheDocument()
+    expect(screen.getByText('1 market.component.assistant')).toBeInTheDocument()
+    expect(screen.queryByText('market.component.minapp')).not.toBeInTheDocument()
+    // Row click drills into the detail view.
+    fireEvent.click(screen.getByRole('button', { name: /P1/ }))
+    expect(await screen.findByRole('heading', { name: 'P1' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'market.detail.back' }))
+    // Detail back lands on the grid with the catalog card visible again.
+    expect(await screen.findByText('P1', { selector: '[data-ui="market.card"] span' })).toBeInTheDocument()
+  })
+
+  it('uninstalls from the manage row through the confirm dialog', async () => {
+    marketApi.getInstalled.mockResolvedValue([installedRecord()])
+    marketApi.uninstall.mockResolvedValue({
+      pluginId: 'p1',
+      results: [{ kind: 'skill', target: 's1', status: 'removed' }],
+      ok: true
+    })
+    render(<MarketPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'market.manageInstalled' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'market.uninstall' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'market.uninstallConfirm' }))
+    await waitFor(() => expect(marketApi.uninstall).toHaveBeenCalledWith('p1'))
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('market.uninstallSuccess'))
+  })
+
+  it('shows the empty state after the last plugin is uninstalled', async () => {
+    marketApi.getInstalled.mockResolvedValueOnce([installedRecord()]).mockResolvedValueOnce([])
+    marketApi.uninstall.mockResolvedValue({
+      pluginId: 'p1',
+      results: [{ kind: 'skill', target: 's1', status: 'removed' }],
+      ok: true
+    })
+    render(<MarketPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'market.manageInstalled' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'market.uninstall' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'market.uninstallConfirm' }))
+    expect(await screen.findByText('market.manage.empty.title')).toBeInTheDocument()
   })
 })

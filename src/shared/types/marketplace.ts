@@ -26,6 +26,10 @@ export interface MarketCatalogPlugin {
   icon: string
   /** Absolute URL the renderer can load directly (relative `icon` resolved against the gateway). */
   iconUrl?: string
+  /** 作者（plugin.json 透传，缺省隐藏对应胶囊）。 */
+  author?: string
+  /** 所属部门（plugin.json 透传，缺省隐藏对应胶囊）。 */
+  department?: string
   components: {
     skills: number
     mcp_servers: number
@@ -99,6 +103,8 @@ export interface MarketPluginManifest {
   repository?: string
   /** Free-form tags from the manifest, rendered next to the category tag. */
   keywords?: string[]
+  /** 插件所属部门（plugin.json 透传）。 */
+  department?: string
   skills: MarketManifestSkill[]
   mcp_servers: MarketManifestMcpServer[]
   assistants: MarketManifestAssistant[]

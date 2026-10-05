@@ -135,6 +135,7 @@ vi.mock('@renderer/i18n/label', () => ({
       store: 'Library',
       paintings: 'Paintings',
       translate: 'Translate',
+      automation: 'Automation',
       mini_app: 'Mini Apps',
       knowledge: 'Knowledge',
       market: 'Market',
@@ -172,7 +173,8 @@ vi.mock('react-i18next', () => ({
           'openclaw.title': 'OpenClaw',
           'paintings.title': 'Paintings',
           'title.launchpad': 'Launchpad',
-          'translate.title': 'Translate'
+          'translate.title': 'Translate',
+          'automation.title': 'Automation'
         }[key] ??
         options?.defaultValue ??
         key
@@ -245,7 +247,7 @@ describe('LaunchpadPage', () => {
 
   it('orders app tiles by the launchpad app order, appending the rest canonically', () => {
     // Launchpad app order is independent of the sidebar favorites order.
-    mocks.appOrder = ['translate', 'assistants', 'agents']
+    mocks.appOrder = ['automation', 'assistants', 'agents']
     mocks.sidebarFavorites = [appFavorite('assistants')]
 
     render(<LaunchpadPage />)
@@ -255,10 +257,11 @@ describe('LaunchpadPage', () => {
       .map((button) => button.textContent)
       .filter((label): label is string =>
         [
-          'Translate',
+          'Automation',
           'Chat',
           'Agent',
           'Paintings',
+          'Translate',
           'Library',
           'Mini Apps',
           'Knowledge',
@@ -269,11 +272,11 @@ describe('LaunchpadPage', () => {
         ].includes(label ?? '')
       )
 
-    expect(appLabels.slice(0, 4)).toEqual(['Translate', 'Chat', 'Agent', 'Paintings'])
+    expect(appLabels.slice(0, 4)).toEqual(['Automation', 'Chat', 'Agent', 'Paintings'])
   })
 
   it('sorts every app tile and persists to the launchpad app order, not the sidebar favorites', () => {
-    mocks.appOrder = ['translate', 'assistants', 'agents']
+    mocks.appOrder = ['automation', 'assistants', 'agents']
 
     render(<LaunchpadPage />)
 
@@ -281,7 +284,7 @@ describe('LaunchpadPage', () => {
 
     // Every renderable app is in a single sortable (stored order first, canonical rest).
     expect(systemSortable.items.map((item: { id: string }) => item.id).slice(0, 3)).toEqual([
-      'translate',
+      'automation',
       'assistants',
       'agents'
     ])
@@ -291,7 +294,7 @@ describe('LaunchpadPage', () => {
     })
 
     const [persisted] = mocks.setAppOrder.mock.calls.at(-1) as unknown as [SidebarAppId[]]
-    expect(persisted.slice(0, 3)).toEqual(['assistants', 'agents', 'translate'])
+    expect(persisted.slice(0, 3)).toEqual(['assistants', 'agents', 'automation'])
     expect(persisted).toHaveLength(systemSortable.items.length)
     expect(mocks.setSidebarFavorites).not.toHaveBeenCalled()
   })

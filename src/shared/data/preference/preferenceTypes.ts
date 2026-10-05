@@ -112,6 +112,7 @@ export const SIDEBAR_FAVORITES = [
   'agents',
   'paintings',
   'translate',
+  'automation',
   'mini_app',
   'knowledge',
   'market',

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="autoback" x1="22" y1="7" x2="53" y2="47" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D6F1FF"/>
+      <stop offset="1" stop-color="#8FC9F2"/>
+    </linearGradient>
+    <linearGradient id="autoicon" x1="14" y1="12" x2="50" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9BD4F7"/>
+      <stop offset=".48" stop-color="#5AA6E8"/>
+      <stop offset="1" stop-color="#3B7FD4"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="12" width="48" height="44" rx="9" fill="url(#autoback)" fill-opacity=".72"/>
+  <rect x="12" y="16" width="40" height="38" rx="7" fill="url(#autoicon)"/>
+  <rect x="12" y="16" width="40" height="9" rx="7" fill="#fff" fill-opacity=".2"/>
+  <path d="M21 12v7M43 12v7" stroke="#fff" stroke-opacity=".92" stroke-width="3.4" stroke-linecap="round"/>
+  <path d="M19 26h26" stroke="#fff" stroke-opacity=".55" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M32 33.5v9.5l6.5 4" fill="none" stroke="#fff" stroke-opacity=".95" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="32" cy="38" r="12.5" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="2"/>
+</svg>

@@ -42,6 +42,10 @@ const catalogPluginSchema = z.object({
   category: z.string().catch(''),
   featured: z.boolean().catch(false),
   icon: z.string().catch(''),
+  // 卡片展示元数据（部门/作者）。网关有则透传；旧网关未部署新字段时
+  // 缺失即隐藏对应胶囊，客户端不强求。下载热度仅管理端可见，不下发客户端。
+  author: z.string().optional(),
+  department: z.string().optional(),
   components: catalogComponentsSchema
 })
 
@@ -96,6 +100,7 @@ export const marketplaceManifestSchema = z.object({
   homepage: z.string().optional(),
   repository: z.string().optional(),
   keywords: z.array(z.string()).optional(),
+  department: z.string().optional(),
   // Component arrays are strict on purpose: the manifest drives installs, so a
   // malformed entry must fail the parse (and abort the install) instead of
   // being silently dropped — the install record would otherwise omit
