@@ -1,9 +1,9 @@
-import { CircleAlert, Loader2, PackageOpen, Sparkles, Star, Store } from 'lucide-react'
+import { ArrowLeft, CircleAlert, ExternalLink, Loader2, PackageOpen, Sparkles, Star, Store, User } from 'lucide-react'
 import type { FC } from 'react'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Badge, Button, Dialog, DialogContent, DialogHeader, DialogTitle, EmptyState, Spinner } from '@cherrystudio/ui'
+import { Badge, Button, EmptyState, Spinner } from '@cherrystudio/ui'
 import { Navbar, NavbarCenter } from '@renderer/components/Navbar'
 import Scrollbar from '@renderer/components/Scrollbar'
 import { toast } from '@renderer/services/toast'
@@ -21,6 +21,9 @@ const KNOWN_CATEGORY_KEYS = ['knowledge', 'productivity', 'utilities'] as const
 
 /** Seconds before an armed uninstall confirm disarms itself. */
 const UNINSTALL_CONFIRM_RESET_SECONDS = 3
+
+/** Page-level navigation: the market grid or a drill-in plugin detail. */
+type MarketView = { page: 'grid' } | { page: 'detail'; id: string }
 
 const ComponentCountBadges: FC<{ plugin: Pick<MarketCatalogPlugin, 'components'> }> = ({ plugin }) => {
   const { t } = useTranslation()
@@ -206,6 +209,16 @@ function groupByCategory(plugins: MarketCatalogPlugin[]): Array<{ key: string; p
   return [...ordered, other].filter((group) => group.plugins.length > 0)
 }
 
+/** Localized label for a known category; unknown values render as-is. */
+function categoryLabel(category: string, t: (key: string) => string): string {
+  const key = `market.categories.${category}`
+  return KNOWN_CATEGORY_KEYS.includes(category as (typeof KNOWN_CATEGORY_KEYS)[number]) ? t(key) : category
+}
+
+/**
+ * One component group rendered as a bordered card section: group title with a
+ * count badge, then one row per component (name + detail line).
+ */
 const DetailComponentsList: FC<{ manifest: MarketPluginManifest }> = ({ manifest }) => {
   const { t } = useTranslation()
   const groups = [
@@ -243,13 +256,23 @@ const DetailComponentsList: FC<{ manifest: MarketPluginManifest }> = ({ manifest
   return (
     <div className="flex flex-col gap-4" data-ui="market.detail.components">
       {groups.map((group) => (
-        <div key={group.key} className="flex flex-col gap-1.5">
-          <h4 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{t(group.key)}</h4>
-          <ul className="flex flex-col gap-1">
+        <div
+          key={group.key}
+          data-ui="market.detail.component-group"
+          className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+          <div className="flex items-center gap-2">
+            <h4 className="text-sm font-medium">{t(group.key)}</h4>
+            <Badge variant="secondary" className="text-[11px] font-normal">
+              {group.items.length}
+            </Badge>
+          </div>
+          <ul className="flex flex-col gap-2.5">
             {group.items.map((item) => (
-              <li key={item.name} className="flex items-baseline gap-2 text-sm">
-                <span className="font-medium">{item.name}</span>
-                {item.detail && <span className="truncate text-xs text-muted-foreground">{item.detail}</span>}
+              <li key={item.name} className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-sm font-medium">{item.name}</span>
+                {item.detail && (
+                  <span className="text-xs leading-relaxed break-all text-muted-foreground">{item.detail}</span>
+                )}
               </li>
             ))}
           </ul>
@@ -259,14 +282,179 @@ const DetailComponentsList: FC<{ manifest: MarketPluginManifest }> = ({ manifest
   )
 }
 
+const ExternalLinkChip: FC<{ href: string; label: string }> = ({ href, label }) => (
+  <a
+    href={href}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground">
+    <ExternalLink size={11} />
+    {label}
+  </a>
+)
+
+interface DetailViewProps {
+  manifest: MarketPluginManifest | null
+  loading: boolean
+  failed: boolean
+  installed: boolean
+  installSucceeded: boolean
+  installing: boolean
+  onInstall: () => void
+  onBack: () => void
+  onRetry: () => void
+}
+
+/** Page-level plugin detail: header, full description, component cards, sticky action bar. */
+const DetailView: FC<DetailViewProps> = ({
+  manifest,
+  loading,
+  failed,
+  installed,
+  installSucceeded,
+  installing,
+  onInstall,
+  onBack,
+  onRetry
+}) => {
+  const { t } = useTranslation()
+  const ready = !loading && !failed && manifest !== null
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col" data-ui="market.detail">
+      <Scrollbar className="min-h-0 flex-1">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-6">
+          <div data-ui="market.detail.back-row">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="-ml-2 gap-1.5 text-muted-foreground"
+              onClick={onBack}
+              data-ui="market.detail.back">
+              <ArrowLeft size={16} />
+              {t('market.detail.back')}
+            </Button>
+          </div>
+
+          {loading ? (
+            <div className="flex flex-1 items-center justify-center py-24" data-ui="market.detail.loading">
+              <Spinner text={t('common.loading')} className="text-muted-foreground" />
+            </div>
+          ) : failed || !manifest ? (
+            <div className="flex flex-1 items-center justify-center py-20" data-ui="market.detail.failed">
+              <EmptyState
+                icon={CircleAlert}
+                title={t('market.detail.loadFailed')}
+                actionLabel={t('market.retry')}
+                onAction={onRetry}
+                compact
+              />
+            </div>
+          ) : (
+            <>
+              <header className="flex items-start gap-4" data-ui="market.detail.header">
+                <PluginIcon iconUrl={manifest.iconUrl} size={56} className="shrink-0" />
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-xl font-semibold">{manifest.name}</h2>
+                    <Badge variant="secondary" className="text-[11px] font-normal">
+                      v{manifest.version || '-'}
+                    </Badge>
+                    {installed && (
+                      <Badge variant="outline" className="text-[11px] font-normal text-emerald-600">
+                        {t('market.installedBadge')}
+                      </Badge>
+                    )}
+                  </div>
+                  {(manifest.category || manifest.author) && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      {manifest.category && (
+                        <Badge variant="outline" className="text-[11px] font-normal">
+                          {categoryLabel(manifest.category, t)}
+                        </Badge>
+                      )}
+                      {manifest.author && (
+                        <span className="inline-flex items-center gap-1" data-ui="market.detail.author">
+                          <User size={12} />
+                          {t('market.detail.author')}: {manifest.author}
+                        </span>
+                      )}
+                      {manifest.homepage && (
+                        <ExternalLinkChip href={manifest.homepage} label={t('market.detail.homepage')} />
+                      )}
+                      {manifest.repository && (
+                        <ExternalLinkChip href={manifest.repository} label={t('market.detail.viewRepo')} />
+                      )}
+                    </div>
+                  )}
+                  {manifest.keywords && manifest.keywords.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1" data-ui="market.detail.keywords">
+                      {manifest.keywords.map((keyword) => (
+                        <Badge
+                          key={keyword}
+                          variant="secondary"
+                          className="text-[11px] font-normal text-muted-foreground">
+                          {keyword}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </header>
+
+              {manifest.description && (
+                <section className="text-sm leading-relaxed whitespace-pre-wrap" data-ui="market.detail.description">
+                  {manifest.description}
+                </section>
+              )}
+
+              <section className="flex flex-col gap-3">
+                <h3 className="text-sm font-medium">{t('market.detail.components')}</h3>
+                <DetailComponentsList manifest={manifest} />
+              </section>
+            </>
+          )}
+        </div>
+      </Scrollbar>
+
+      {ready && manifest && (
+        <div className="border-t bg-background" data-ui="market.detail.actions">
+          <div className="mx-auto flex w-full max-w-3xl items-center gap-3 p-4">
+            <Button className="min-w-28" disabled={installed || installing} onClick={onInstall}>
+              {installing ? (
+                <>
+                  <Loader2 className="mr-1 size-3.5 animate-spin" />
+                  {t('market.installing')}
+                </>
+              ) : installed ? (
+                installSucceeded ? (
+                  <>
+                    <Sparkles className="mr-1 size-3.5" />
+                    {t('market.installSuccess')}
+                  </>
+                ) : (
+                  t('market.installedBadge')
+                )
+              ) : (
+                t('market.install')
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const MarketPage: FC = () => {
   const { t } = useTranslation()
   const [catalog, setCatalog] = useState<MarketCatalogResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [installed, setInstalled] = useState<MarketInstalledRecord[]>([])
-  const [detail, setDetail] = useState<{ open: boolean; loading: boolean; manifest: MarketPluginManifest | null }>({
-    open: false,
+  const [view, setView] = useState<MarketView>({ page: 'grid' })
+  const [detail, setDetail] = useState<{ loading: boolean; failed: boolean; manifest: MarketPluginManifest | null }>({
     loading: false,
+    failed: false,
     manifest: null
   })
   const [installing, setInstalling] = useState(false)
@@ -302,16 +490,26 @@ const MarketPage: FC = () => {
     void refreshInstalled()
   }, [loadCatalog, refreshInstalled])
 
-  const openDetail = useCallback(async (plugin: MarketCatalogPlugin) => {
-    setDetail({ open: true, loading: true, manifest: null })
-    setJustInstalled(null)
+  const loadManifest = useCallback(async (pluginId: string) => {
+    setDetail({ loading: true, failed: false, manifest: null })
     try {
-      const manifest = await window.api.market.getPluginDetail(plugin.id)
-      setDetail({ open: true, loading: false, manifest })
+      const manifest = await window.api.market.getPluginDetail(pluginId)
+      setDetail({ loading: false, failed: false, manifest })
     } catch {
-      setDetail({ open: true, loading: false, manifest: null })
+      setDetail({ loading: false, failed: true, manifest: null })
     }
   }, [])
+
+  const openDetail = useCallback(
+    (plugin: MarketCatalogPlugin) => {
+      setJustInstalled(null)
+      setView({ page: 'detail', id: plugin.id })
+      void loadManifest(plugin.id)
+    },
+    [loadManifest]
+  )
+
+  const backToGrid = useCallback(() => setView({ page: 'grid' }), [])
 
   const handleInstall = useCallback(
     async (pluginId: string) => {
@@ -395,7 +593,7 @@ const MarketPage: FC = () => {
                   key={plugin.id}
                   plugin={plugin}
                   installed={installedIds.has(plugin.id)}
-                  onOpen={(entry) => void openDetail(entry)}
+                  onOpen={openDetail}
                 />
               ))}
             </div>
@@ -409,7 +607,7 @@ const MarketPage: FC = () => {
                   key={plugin.id}
                   plugin={plugin}
                   installed={installedIds.has(plugin.id)}
-                  onOpen={(entry) => void openDetail(entry)}
+                  onOpen={openDetail}
                 />
               ))}
             </div>
@@ -419,9 +617,9 @@ const MarketPage: FC = () => {
     )
   }
 
-  const detailPluginId = detail.manifest?.id
-  const detailInstalled = detailPluginId ? installedIds.has(detailPluginId) : false
-  const detailInstallSucceeded = detailPluginId !== null && detailPluginId === justInstalled
+  const detailPluginId = view.page === 'detail' ? view.id : null
+  const detailInstalled = detail.manifest ? installedIds.has(detail.manifest.id) : false
+  const detailInstallSucceeded = detail.manifest !== null && detail.manifest.id === justInstalled
 
   return (
     <div data-ui="market.view" className="relative flex h-full min-h-0 flex-1 flex-col text-foreground">
@@ -429,89 +627,39 @@ const MarketPage: FC = () => {
         <NavbarCenter className="border-r-0">{t('market.title')}</NavbarCenter>
       </Navbar>
 
-      <Scrollbar className="min-h-0 flex-1">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 p-6">
-          {installed.length > 0 && (
-            <section className="flex flex-col gap-3" data-ui="market.installed">
-              <h3 className="text-sm font-medium text-foreground">{t('market.installed.title')}</h3>
-              <div className="flex flex-wrap gap-2">
-                {installed.map((record) => (
-                  <InstalledChip key={record.pluginId} record={record} onUninstalled={() => void refreshInstalled()} />
-                ))}
-              </div>
-            </section>
-          )}
-          {renderCatalogBody()}
-        </div>
-      </Scrollbar>
-
-      <Dialog open={detail.open} onOpenChange={(open) => setDetail((state) => ({ ...state, open }))}>
-        <DialogContent size="lg" className="flex flex-col gap-4" data-ui="market.detail">
-          <DialogHeader>
-            <DialogTitle>{t('market.detail.title')}</DialogTitle>
-          </DialogHeader>
-          {detail.loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Spinner text={t('common.loading')} className="text-muted-foreground" />
-            </div>
-          ) : !detail.manifest ? (
-            <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-              {t('market.detail.loadFailed')}
-            </div>
-          ) : (
-            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
-              <div className="flex items-start gap-3">
-                <PluginIcon iconUrl={detail.manifest.iconUrl} size={44} />
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base font-medium">{detail.manifest.name}</span>
-                    <span className="text-xs text-muted-foreground">v{detail.manifest.version || '-'}</span>
-                    {detailInstalled && (
-                      <Badge variant="outline" className="text-[11px] font-normal text-emerald-600">
-                        {t('market.installedBadge')}
-                      </Badge>
-                    )}
-                  </div>
-                  {detail.manifest.description && (
-                    <p className="text-xs leading-relaxed text-muted-foreground">{detail.manifest.description}</p>
-                  )}
+      {view.page === 'grid' ? (
+        <Scrollbar className="min-h-0 flex-1">
+          <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 p-6">
+            {installed.length > 0 && (
+              <section className="flex flex-col gap-3" data-ui="market.installed">
+                <h3 className="text-sm font-medium text-foreground">{t('market.installed.title')}</h3>
+                <div className="flex flex-wrap gap-2">
+                  {installed.map((record) => (
+                    <InstalledChip
+                      key={record.pluginId}
+                      record={record}
+                      onUninstalled={() => void refreshInstalled()}
+                    />
+                  ))}
                 </div>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <h4 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  {t('market.detail.components')}
-                </h4>
-                <DetailComponentsList manifest={detail.manifest} />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  disabled={detailInstalled || installing}
-                  onClick={() => detail.manifest && void handleInstall(detail.manifest.id)}>
-                  {installing ? (
-                    <>
-                      <Loader2 className="mr-1 size-3.5 animate-spin" />
-                      {t('market.installing')}
-                    </>
-                  ) : detailInstalled ? (
-                    detailInstallSucceeded ? (
-                      <>
-                        <Sparkles className="mr-1 size-3.5" />
-                        {t('market.installSuccess')}
-                      </>
-                    ) : (
-                      t('market.installedBadge')
-                    )
-                  ) : (
-                    t('market.install')
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+              </section>
+            )}
+            {renderCatalogBody()}
+          </div>
+        </Scrollbar>
+      ) : (
+        <DetailView
+          manifest={detail.manifest}
+          loading={detail.loading}
+          failed={detail.failed}
+          installed={detailInstalled}
+          installSucceeded={detailInstallSucceeded}
+          installing={installing}
+          onInstall={() => detail.manifest && void handleInstall(detail.manifest.id)}
+          onBack={backToGrid}
+          onRetry={() => detailPluginId && void loadManifest(detailPluginId)}
+        />
+      )}
     </div>
   )
 }

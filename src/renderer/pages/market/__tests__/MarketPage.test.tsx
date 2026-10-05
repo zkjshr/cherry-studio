@@ -101,6 +101,61 @@ async function openDetailAndInstall(): Promise<void> {
   await waitFor(() => expect(marketApi.install).toHaveBeenCalledWith('p1'))
 }
 
+describe('MarketPage detail drill-in', () => {
+  it('opens a page-level detail with header metadata and returns to the grid', async () => {
+    marketApi.getPluginDetail.mockResolvedValue({
+      ...manifest,
+      description: '第一段介绍\n第二段介绍',
+      author: '知开始',
+      homepage: 'https://example.com',
+      repository: 'https://github.com/example/p1',
+      keywords: ['rag', 'kb']
+    })
+    render(<MarketPage />)
+    fireEvent.click(await screen.findByText('P1'))
+    // Page-level view: the grid card is replaced by a detail page with the
+    // plugin name as heading, metadata chips, full description and an install
+    // action in the sticky bar.
+    expect(await screen.findByRole('heading', { name: 'P1' })).toBeInTheDocument()
+    expect(screen.getByText(/第一段介绍/)).toBeInTheDocument()
+    expect(screen.getByText(/market\.detail\.author/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'market.detail.homepage' })).toHaveAttribute('href', 'https://example.com')
+    expect(screen.getByRole('link', { name: 'market.detail.viewRepo' })).toHaveAttribute(
+      'href',
+      'https://github.com/example/p1'
+    )
+    expect(screen.getByText('rag')).toBeInTheDocument()
+    expect(screen.getByText('kb')).toBeInTheDocument()
+    // Component groups render as bordered cards with count badges.
+    expect(screen.getByText('market.component.mcp_server')).toBeInTheDocument()
+    expect(screen.getByText('2')).toBeInTheDocument()
+    expect(screen.getByText('market.component.assistant')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'market.install' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'market.detail.back' }))
+    expect(screen.queryByRole('button', { name: 'market.install' })).not.toBeInTheDocument()
+    expect(await screen.findByText('P1', { selector: '[data-ui="market.card"] span' })).toBeInTheDocument()
+  })
+
+  it('shows a retryable failure state when the manifest fetch fails', async () => {
+    marketApi.getPluginDetail.mockRejectedValueOnce(new Error('boom'))
+    render(<MarketPage />)
+    fireEvent.click(await screen.findByText('P1'))
+    expect(await screen.findByText('market.detail.loadFailed')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'market.retry' }))
+    expect(await screen.findByRole('heading', { name: 'P1' })).toBeInTheDocument()
+    expect(marketApi.getPluginDetail).toHaveBeenCalledTimes(2)
+  })
+
+  it('disables the install action when the plugin is already installed', async () => {
+    marketApi.getInstalled.mockResolvedValue([installedRecord()])
+    render(<MarketPage />)
+    fireEvent.click(await screen.findByText('P1', { selector: '[data-ui="market.card"] span' }))
+    const installButton = await screen.findByRole('button', { name: 'market.installedBadge' })
+    expect(installButton).toBeDisabled()
+  })
+})
+
 describe('MarketPage install toasts', () => {
   it('shows the success toast only when every component installed', async () => {
     marketApi.install.mockResolvedValue({

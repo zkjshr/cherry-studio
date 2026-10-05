@@ -90,6 +90,12 @@ export const marketplaceManifestSchema = z.object({
   description: z.string().catch(''),
   category: z.string().catch(''),
   icon: z.string().catch(''),
+  // Optional presentation fields — the gateway passes plugin.json through
+  // as-is on the detail endpoint, so these flow through when admins add them.
+  author: z.string().optional(),
+  homepage: z.string().optional(),
+  repository: z.string().optional(),
+  keywords: z.array(z.string()).optional(),
   // Component arrays are strict on purpose: the manifest drives installs, so a
   // malformed entry must fail the parse (and abort the install) instead of
   // being silently dropped — the install record would otherwise omit

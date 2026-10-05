@@ -60,6 +60,23 @@ describe('marketplaceManifestSchema', () => {
     }
   })
 
+  it('passes through the optional presentation fields (author/homepage/repository/keywords)', () => {
+    const parsed = marketplaceManifestSchema.safeParse({
+      ...validManifest,
+      author: '知开始',
+      homepage: 'https://example.com',
+      repository: 'https://github.com/example/p1',
+      keywords: ['rag', 'kb']
+    })
+    expect(parsed.success).toBe(true)
+    if (parsed.success) {
+      expect(parsed.data.author).toBe('知开始')
+      expect(parsed.data.homepage).toBe('https://example.com')
+      expect(parsed.data.repository).toBe('https://github.com/example/p1')
+      expect(parsed.data.keywords).toEqual(['rag', 'kb'])
+    }
+  })
+
   it('rejects a manifest whose id breaks the plugin id whitelist', () => {
     expect(marketplaceManifestSchema.safeParse({ ...validManifest, id: '../escape' }).success).toBe(false)
   })

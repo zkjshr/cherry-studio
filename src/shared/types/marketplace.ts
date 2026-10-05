@@ -87,6 +87,18 @@ export interface MarketPluginManifest {
   icon: string
   /** Absolute URL the renderer can load directly (relative `icon` resolved against the gateway). */
   iconUrl?: string
+  /**
+   * Optional presentation fields — the gateway serves `plugin.json` as-is on
+   * the detail endpoint, so any of these may be present. All optional; the
+   * detail header renders each only when populated.
+   */
+  author?: string
+  /** Plugin homepage (absolute URL) — rendered as an external-link chip. */
+  homepage?: string
+  /** Source repository (absolute URL) — rendered as an external-link chip. */
+  repository?: string
+  /** Free-form tags from the manifest, rendered next to the category tag. */
+  keywords?: string[]
   skills: MarketManifestSkill[]
   mcp_servers: MarketManifestMcpServer[]
   assistants: MarketManifestAssistant[]
