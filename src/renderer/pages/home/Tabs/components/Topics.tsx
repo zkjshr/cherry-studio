@@ -1,5 +1,5 @@
 import dayjs from 'dayjs'
-import { FilePenLine, MoreHorizontal, PinIcon, Plus, Archive, Unlink } from 'lucide-react'
+import { FilePenLine, MoreHorizontal, PinIcon, Archive, Unlink } from 'lucide-react'
 import type { RefObject } from 'react'
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -568,10 +568,7 @@ export function Topics({
   )
   // Enterprise-managed assistants: edit/archive entry points are hidden (config sync owns them).
   const { enterpriseState } = useEnterpriseState()
-  const managedAssistantIdSet = useMemo(
-    () => new Set(enterpriseState?.managedAssistantIds ?? []),
-    [enterpriseState]
-  )
+  const managedAssistantIdSet = useMemo(() => new Set(enterpriseState?.managedAssistantIds ?? []), [enterpriseState])
   const assistantGroupById = useMemo(
     () => new Map(assistantGroups.map((group) => [group.id, group] as const)),
     [assistantGroups]
@@ -868,11 +865,9 @@ export function Topics({
     () => (isRightPanel ? { assistantId: assistantIdFilter ?? null } : undefined),
     [assistantIdFilter, isRightPanel]
   )
-  const headerCreateLabel = isAssistantDisplayMode ? t('chat.add.assistant.title') : t('chat.conversation.new')
-  const handleHeaderCreate = isAssistantDisplayMode
-    ? () => void onAddAssistant?.()
-    : () => void onNewTopic?.(headerCreateTopicPayload)
-  const showHeaderCreateItem = !(isAssistantDisplayMode && resolvedPanePosition === 'right')
+  // 头部创建按钮统一为「新建聊天」；「添加助手」收进右侧选项菜单（见 TopicListOptionsMenu）。
+  const headerCreateLabel = t('chat.conversation.new')
+  const handleHeaderCreate = () => void onNewTopic?.(headerCreateTopicPayload)
   const handleGroupHeaderSelectTopic = useCallback(
     (topicId: string) => {
       const topic = filteredTopics.find((candidate) => candidate.id === topicId)
@@ -1570,27 +1565,7 @@ export function Topics({
               aria-label={t('chat.topics.search.title')}
               placeholder={t('chat.topics.search.placeholder')}
             />
-          ) : showHeaderCreateItem && isAssistantDisplayMode ? (
-            <ResourceList.HeaderItem
-              type="button"
-              aria-label={headerCreateLabel}
-              disabled={!onAddAssistant}
-              icon={<Plus />}
-              label={headerCreateLabel}
-              onClick={handleHeaderCreate}
-              actions={
-                <TopicListOptionsMenu
-                  historyRecordsActive={historyRecordsActive}
-                  manageAssistantsActive={manageAssistantsActive}
-                  mode={displayMode}
-                  onChange={handleTopicDisplayModeChange}
-                  onManageAssistants={onManageAssistants}
-                  onOpenHistoryRecords={onOpenHistoryRecords}
-                  sectionIds={topicAssistantSectionIds}
-                />
-              }
-            />
-          ) : showHeaderCreateItem ? (
+          ) : (
             <ResourceList.HeaderItem
               data-ui="chat.topic-list.action.create"
               type="button"
@@ -1605,20 +1580,12 @@ export function Topics({
                   manageAssistantsActive={manageAssistantsActive}
                   mode={displayMode}
                   onChange={handleTopicDisplayModeChange}
+                  onAddAssistant={onAddAssistant}
                   onManageAssistants={onManageAssistants}
                   onOpenHistoryRecords={onOpenHistoryRecords}
+                  sectionIds={isAssistantDisplayMode ? topicAssistantSectionIds : undefined}
                 />
               }
-            />
-          ) : (
-            <TopicListOptionsMenu
-              historyRecordsActive={historyRecordsActive}
-              manageAssistantsActive={manageAssistantsActive}
-              mode={displayMode}
-              onChange={handleTopicDisplayModeChange}
-              onManageAssistants={onManageAssistants}
-              onOpenHistoryRecords={onOpenHistoryRecords}
-              sectionIds={isAssistantDisplayMode ? topicAssistantSectionIds : undefined}
             />
           )}
         </ResourceList.Header>

@@ -26,6 +26,8 @@ type ConversationListSectionToggle = {
 }
 
 type ConversationListOptionsMenuProps<TMode extends string> = {
+  /** 置底的主操作（如「添加助手」），在历史/管理项之前单列一组。 */
+  addAction?: ConversationListMenuAction
   historyAction?: ConversationListMenuAction
   manageAction?: ConversationListMenuAction
   mode: TMode
@@ -36,6 +38,7 @@ type ConversationListOptionsMenuProps<TMode extends string> = {
 }
 
 export function ConversationListOptionsMenu<TMode extends string>({
+  addAction,
   historyAction,
   manageAction,
   mode,
@@ -95,6 +98,12 @@ export function ConversationListOptionsMenu<TMode extends string>({
                 collapseLabel={sectionToggle.collapseLabel}
                 onClick={() => setOpen(false)}
               />
+            </>
+          )}
+          {addAction && (
+            <>
+              <MenuDivider />
+              {renderAction(addAction)}
             </>
           )}
           {historyAction && (

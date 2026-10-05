@@ -1,4 +1,4 @@
-import { Bot, Clock, History } from 'lucide-react'
+import { Bot, Clock, History, UserPlus } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -17,6 +17,8 @@ const TOPIC_DISPLAY_ICONS: Record<TopicDisplayMode, ReactNode> = {
 }
 
 type TopicListOptionsMenuProps = {
+  /** 「添加助手」入口（进入助手选择器）；不传则菜单中不显示该项。 */
+  onAddAssistant?: () => void | Promise<void>
   historyRecordsActive?: boolean
   manageAssistantsActive?: boolean
   mode: TopicDisplayMode
@@ -27,6 +29,7 @@ type TopicListOptionsMenuProps = {
 }
 
 export function TopicListOptionsMenu({
+  onAddAssistant,
   historyRecordsActive,
   manageAssistantsActive,
   mode,
@@ -53,6 +56,15 @@ export function TopicListOptionsMenu({
               collapseLabel: t('chat.topics.group.collapse_all'),
               expandLabel: t('chat.topics.group.expand_all'),
               ids: sectionIds
+            }
+          : undefined
+      }
+      addAction={
+        onAddAssistant
+          ? {
+              icon: <UserPlus size={16} />,
+              label: t('chat.add.assistant.title'),
+              onSelect: onAddAssistant
             }
           : undefined
       }

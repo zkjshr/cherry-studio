@@ -1279,27 +1279,37 @@ describe('Topics', () => {
     expect(
       screen.queryByText('Create a chat and it will stay here so you can continue with its context later.')
     ).not.toBeInTheDocument()
+    // 「添加助手」收进选项菜单；头部创建统一为新建聊天（新增 1 处 = 3）
     expect(screen.getByRole('button', { name: 'Add Assistant' })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'chat.conversation.new' })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: 'chat.conversation.new' })).toHaveLength(3)
     expect(onNewTopic).not.toHaveBeenCalled()
   })
 
-  it('uses the top header action to add an assistant in assistant display mode', () => {
+  it('creates a new chat from the header and adds assistants via the menu in assistant display mode', () => {
     const onAddAssistant = vi.fn()
     const { onNewTopic } = renderTopicList({ onAddAssistant })
-    const addAssistantButton = screen.getByRole('button', { name: 'Add Assistant' })
 
-    expect(addAssistantButton).not.toHaveAttribute('data-ui', 'chat.topic-list.action.create')
-    fireEvent.click(addAssistantButton)
+    // 头部创建按钮 = 新建聊天（与时间模式一致；空态里还有同名按钮，按 data-ui 取）
+    const createButton = screen
+      .getAllByRole('button', { name: 'chat.conversation.new' })
+      .find((button) => button.getAttribute('data-ui') === 'chat.topic-list.action.create')
+    expect(createButton).toBeDefined()
+    fireEvent.click(createButton!)
+    expect(onNewTopic).toHaveBeenCalled()
 
+    // 「添加助手」收进选项菜单
+    const addAssistantItem = screen.getByRole('button', { name: 'Add Assistant' })
+    fireEvent.click(addAssistantItem)
     expect(onAddAssistant).toHaveBeenCalledTimes(1)
-    expect(onNewTopic).not.toHaveBeenCalled()
   })
 
-  it('hides the add assistant header action when topics are on the right', () => {
+  it('keeps add assistant only as an options-menu item when topics are on the right', () => {
     renderTopicList({ panePosition: 'right' })
 
-    expect(screen.queryByRole('button', { name: 'Add Assistant' })).not.toBeInTheDocument()
+    // 「添加助手」只存在于折叠选项菜单，不再占据头部创建按钮
+    const addButtons = screen.getAllByRole('button', { name: 'Add Assistant' })
+    expect(addButtons.length).toBeGreaterThan(0)
+    expect(addButtons.every((button) => button.dataset.testid === 'menu-item')).toBe(true)
     expect(screen.getByLabelText('Display mode')).toBeInTheDocument()
   })
 

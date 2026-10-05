@@ -698,7 +698,9 @@ const HomePage: FC = () => {
           )
         }
       : null
-  const assistantPickerDialog = isClassicTopicLayout ? (
+  // 选择器弹窗无条件挂载：助手分组模式的资源列表与折叠菜单里的「添加助手」
+  // 都通过 assistantPickerOpen 触发，不再依赖经典布局才渲染。
+  const assistantPickerDialog = (
     <AssistantConversationPickerDialog
       open={assistantPickerOpen}
       onOpenChange={setAssistantPickerOpen}
@@ -706,7 +708,7 @@ const HomePage: FC = () => {
       assistantsLoading={isAssistantsLoading || isAssistantsRefreshing}
       onSelect={handleAssistantConversationSelect}
     />
-  ) : null
+  )
 
   const centerSurface = historyRecordsCenter ?? resourceCenter
 
