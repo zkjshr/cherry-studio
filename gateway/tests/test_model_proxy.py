@@ -105,6 +105,47 @@ def test_openai_upstream_unreachable_is_502(_isolated_db):
 
 
 @respx.mock
+def test_ollama_flattens_array_text_content(_isolated_db):
+    """智能体/多段文本消息以 OpenAI 数组形 content 下发；ollama 只收字符串，
+    网关必须在转发前压平（回归：400 cannot unmarshal array into ...）。"""
+    _put_upstream("oll", protocol="ollama", base_url="http://o.test", api_key="",
+                  models=[{"id": "qwen"}])
+    mocked = respx.post("http://o.test/api/chat").mock(return_value=httpx.Response(200, json={
+        "model": "qwen", "message": {"role": "assistant", "content": "ok"}, "done": True}))
+    resp = client.post("/v1/chat/completions", headers=AUTH, json={
+        "model": "oll/qwen",
+        "messages": [
+            {"role": "system", "content": [{"type": "text", "text": "你是助手"}]},
+            {"role": "user", "content": [{"type": "text", "text": "第一段"}, {"type": "text", "text": "第二段"}]},
+            {"role": "assistant", "content": "上一轮"},
+            # 含非 text 部件的消息原样透传，交由上游取舍
+            {"role": "user", "content": [{"type": "text", "text": "看图"}, {"type": "image_url", "image_url": {"url": "data:,"}}]},
+        ]})
+    assert resp.status_code == 200
+    sent = json.loads(mocked.calls.last.request.content)["messages"]
+    assert sent[0]["content"] == "你是助手"
+    assert sent[1]["content"] == "第一段\n\n第二段"
+    assert sent[2]["content"] == "上一轮"
+    assert sent[3]["content"] == [{"type": "text", "text": "看图"},
+                                  {"type": "image_url", "image_url": {"url": "data:,"}}]
+
+
+@respx.mock
+def test_openai_flattens_array_text_content(_isolated_db):
+    """openai 路径同样压平纯文本数组 content（链式网关/严格上游场景）。"""
+    _put_upstream("up")
+    mocked = respx.post("http://up.test/chat/completions").mock(return_value=httpx.Response(
+        200, json={"id": "x", "object": "chat.completion", "choices": [
+            {"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}]}))
+    resp = client.post("/v1/chat/completions", headers=AUTH, json={
+        "model": "up/m1",
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "你好"}]}]})
+    assert resp.status_code == 200
+    sent = json.loads(mocked.calls.last.request.content)
+    assert sent["messages"][0]["content"] == "你好"
+
+
+@respx.mock
 def test_ollama_non_stream_aggregated_with_usage(_isolated_db):
     _put_upstream("oll", protocol="ollama", base_url="http://o.test", api_key="",
                   models=[{"id": "qwen"}])

@@ -97,6 +97,10 @@ async def _proxy_openai(upstream: dict, model_id: str, model: str, body: dict, t
     headers = {"Authorization": f"Bearer {upstream['api_key']}"} if upstream["api_key"] else {}
     url = f"{upstream['base_url']}/chat/completions"
     payload = {**body, "model": model_id}
+    if "messages" in payload:
+        # 同 ollama 路径：纯文本数组形 content 压平为字符串（字符串形是所有
+        # OpenAI 兼容服务的基线格式，链式网关/严格上游都更稳妥）。
+        payload["messages"] = _flatten_text_content(payload["messages"])
     if not body.get("stream"):
         async with httpx.AsyncClient(timeout=UPSTREAM_TIMEOUT) as client:
             resp = await client.post(url, json=payload, headers=headers)
@@ -145,12 +149,36 @@ async def _proxy_openai(upstream: dict, model_id: str, model: str, body: dict, t
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+def _flatten_text_content(messages):
+    """OpenAI 数组形 content（全部为 text 部件时）压平为字符串。
+
+    ollama 的 Go 结构体只收 string content，而智能体/多段文本消息常以
+    `[{"type":"text","text":...}]` 数组下发，直接透传会被 400 拒绝
+    （cannot unmarshal array into ... messages.content of type string）。
+    含非 text 部件（图片等）的消息原样保留，交由上游自行取舍。
+    """
+    out = []
+    for m in messages:
+        content = m.get("content")
+        if isinstance(content, list):
+            texts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
+            if len(texts) == len(content):
+                m = {**m, "content": "\n\n".join(t for t in texts if t)}
+        out.append(m)
+    return out
+
+
 async def _proxy_ollama(upstream: dict, model_id: str, model: str, body: dict, t0: float):
     """ollama 协议：POST {base}/api/chat（{model, messages, stream}）；NDJSON→OpenAI chunk 流
-    （首块带 role，done 行抽 prompt_eval_count/eval_count 记账），非 stream 聚合为一份 completion。"""
+    （首块带 role，done 行抽 prompt_eval_count/eval_count 记账），非 stream 聚合为一份 completion。
+    messages 先过 `_flatten_text_content`（数组形 content → 字符串）再转发。"""
     headers = {"Authorization": f"Bearer {upstream['api_key']}"} if upstream["api_key"] else {}
     url = f"{upstream['base_url']}/api/chat"
-    payload = {"model": model_id, "messages": body.get("messages") or [], "stream": bool(body.get("stream"))}
+    payload = {
+        "model": model_id,
+        "messages": _flatten_text_content(body.get("messages") or []),
+        "stream": bool(body.get("stream")),
+    }
     compl_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
 
     if payload["stream"]:
