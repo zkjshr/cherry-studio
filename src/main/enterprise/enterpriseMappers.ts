@@ -6,7 +6,9 @@
  * applier (`applyEnterpriseConfig.ts`) composes these with the data services.
  */
 
+import type { OnboardingProviderSetupStatus } from '@shared/data/preference/preferenceTypes'
 import { createUniqueModelId, type UniqueModelId } from '@shared/data/types/model'
+import { LATEST_PRIVACY_POLICY_VERSION } from '@shared/utils/constants'
 import {
   ENTERPRISE_MCP_NAME_PREFIX,
   ENTERPRISE_PROVIDER_PREFIX,
@@ -19,12 +21,7 @@ import {
 /** Forced provider-id namespace for every enterprise-managed provider row. */
 export { ENTERPRISE_MCP_NAME_PREFIX, ENTERPRISE_PROVIDER_PREFIX }
 
-export {
-  filterEnterpriseMcpServerNames,
-  isEnterpriseMcpServerName,
-  isEnterpriseMiniAppId,
-  isEnterpriseProviderId
-}
+export { filterEnterpriseMcpServerNames, isEnterpriseMcpServerName, isEnterpriseMiniAppId, isEnterpriseProviderId }
 
 /** Legal appId characters — mirrors `MINI_APP_ID_REGEX` in @shared/data/api/schemas/miniApps. */
 const MINI_APP_ID_REGEX = /^[A-Za-z0-9_-]+$/
@@ -67,7 +64,9 @@ export function withEnterpriseMcpNamePrefix(name: string): string {
  * Passes the validated map through verbatim; `undefined` stays `undefined`
  * (caller decides between "leave unchanged" and an explicit `{}` clear).
  */
-export function toEnterpriseMcpHeaders(headers: Record<string, string> | undefined): Record<string, string> | undefined {
+export function toEnterpriseMcpHeaders(
+  headers: Record<string, string> | undefined
+): Record<string, string> | undefined {
   if (headers === undefined) return undefined
   return { ...headers }
 }
@@ -110,6 +109,43 @@ export function toEnterpriseUniqueModelId(ref: string): UniqueModelId | null {
   } catch {
     return null
   }
+}
+
+/**
+ * Preference updates that make a fresh install skip the first-run onboarding
+ * (the「连接 CherryIN / 配置其他服务商」dialog) once an enterprise config has
+ * been applied — the enterprise pipeline IS the provider setup, so the dialog
+ * has nothing left to ask.
+ *
+ * - `provider_setup.status` flips to `completed` only while it is still
+ *   `pending` (or an unexpected value — DB rows can be corrupt); a status the
+ *   user already settled is never touched.
+ * - `privacy.policy_version` is filled only when EMPTY: bypassing onboarding
+ *   skips its embedded consent step, and the empty default would immediately
+ *   pop the PrivacyPolicyUpdateGate instead. Mirrors onboarding's
+ *   default-accepted checkbox. A version the user already recorded is kept, so
+ *   a future policy bump still surfaces the update gate.
+ *
+ * Returns null when nothing needs writing, so a repeated apply stays a no-op.
+ */
+export function computeEnterpriseOnboardingUpdates(
+  providerSetupStatus: OnboardingProviderSetupStatus | undefined,
+  privacyPolicyVersion: string | undefined
+): Partial<{
+  'app.onboarding.provider_setup.status': OnboardingProviderSetupStatus
+  'app.privacy.policy_version': string
+}> | null {
+  const updates: Partial<{
+    'app.onboarding.provider_setup.status': OnboardingProviderSetupStatus
+    'app.privacy.policy_version': string
+  }> = {}
+  if (providerSetupStatus !== 'completed' && providerSetupStatus !== 'skipped') {
+    updates['app.onboarding.provider_setup.status'] = 'completed'
+  }
+  if (!privacyPolicyVersion) {
+    updates['app.privacy.policy_version'] = LATEST_PRIVACY_POLICY_VERSION
+  }
+  return Object.keys(updates).length > 0 ? updates : null
 }
 
 export interface ModelReconcileDiff {

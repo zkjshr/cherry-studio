@@ -13,14 +13,17 @@
  * Apply order respects foreign keys: providers+models first, then default
  * models, then MCP servers (assistants reference their ids), then assistants,
  * minapps, and finally the raw preference rows (`kb_entries`, plus the
- * managed-assistant id list powering the renderer's read-only guard).
+ * managed-assistant id list powering the renderer's read-only guard). After
+ * default models land, first-run onboarding is marked complete — the
+ * enterprise pipeline replaces that setup, so the「连接 CherryIN」dialog must
+ * not appear on a fresh enterprise install.
  */
 
 import { and, eq } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 
-import { ENDPOINT_TYPE } from '@cherrystudio/provider-registry'
 import { application } from '@application'
+import { ENDPOINT_TYPE } from '@cherrystudio/provider-registry'
 import { preferenceTable } from '@data/db/schemas/preference'
 import { assistantDataService } from '@data/services/AssistantService'
 import { mcpServerService } from '@data/services/McpServerService'
@@ -31,10 +34,10 @@ import { loggerService } from '@logger'
 import { DataApiError, ErrorCode } from '@shared/data/api/errors'
 import type { CreateModelDto } from '@shared/data/api/schemas/models'
 import { DEFAULT_ASSISTANT_SETTINGS, type Assistant, type AssistantSettings } from '@shared/data/types/assistant'
+import type { McpServerType } from '@shared/data/types/mcpServer'
+import type { MiniApp } from '@shared/data/types/miniApp'
 import type { UniqueModelId } from '@shared/data/types/model'
 import { createUniqueModelId } from '@shared/data/types/model'
-import type { MiniApp } from '@shared/data/types/miniApp'
-import type { McpServerType } from '@shared/data/types/mcpServer'
 import { ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY } from '@shared/utils/enterprise'
 
 import type {
@@ -43,6 +46,7 @@ import type {
   EnterpriseProviderConfig
 } from './enterpriseConfigTypes'
 import {
+  computeEnterpriseOnboardingUpdates,
   computeModelReconcileDiff,
   sanitizeEnterpriseAppId,
   toEnterpriseMcpHeaders,
@@ -62,6 +66,7 @@ export interface ApplyEnterpriseConfigResult {
   modelsAdded: number
   modelsRemoved: number
   defaultModelsSet: number
+  onboardingCompleted: boolean
   mcpServersApplied: number
   assistantsApplied: number
   minappsApplied: number
@@ -79,6 +84,7 @@ export async function applyEnterpriseConfig(config: EnterpriseClientConfig): Pro
     modelsAdded: 0,
     modelsRemoved: 0,
     defaultModelsSet: 0,
+    onboardingCompleted: false,
     mcpServersApplied: 0,
     assistantsApplied: 0,
     minappsApplied: 0,
@@ -88,6 +94,7 @@ export async function applyEnterpriseConfig(config: EnterpriseClientConfig): Pro
 
   await applyProvidersAndModels(config, result)
   await applyDefaultModels(config, result)
+  result.onboardingCompleted = await ensureOnboardingCompleted()
   await applyMcpServers(config, result)
   const managedAssistantIds = await applyAssistants(config, result)
   await applyMinapps(config, result)
@@ -176,9 +183,7 @@ function reconcileProviderModels(providerId: string, item: EnterpriseProviderCon
 
   // Converge status/display fields for models the config continues to list
   // (covers both freshly created rows and ones already present).
-  const currentById = new Map(
-    modelService.list({ providerId }).map((model) => [model.apiModelId, model] as const)
-  )
+  const currentById = new Map(modelService.list({ providerId }).map((model) => [model.apiModelId, model] as const))
   for (const [modelId, target] of desiredById) {
     const current = currentById.get(modelId)
     if (!current) continue
@@ -191,7 +196,11 @@ function reconcileProviderModels(providerId: string, item: EnterpriseProviderCon
   }
 
   if (toAddIds.length > 0 || toRemoveIds.length > 0) {
-    logger.info('Reconciled enterprise provider models', { providerId, added: toAddIds.length, removed: toRemoveIds.length })
+    logger.info('Reconciled enterprise provider models', {
+      providerId,
+      added: toAddIds.length,
+      removed: toRemoveIds.length
+    })
   }
 }
 
@@ -216,10 +225,7 @@ async function applyDefaultModels(config: EnterpriseClientConfig, result: ApplyE
     updates['feature.translate.model_id'] = resolveConfigModel(defaults.translate, 'default_models.translate')
   }
   if (defaults.quick_model !== undefined) {
-    updates['feature.quick_assistant.model_id'] = resolveConfigModel(
-      defaults.quick_model,
-      'default_models.quick_model'
-    )
+    updates['feature.quick_assistant.model_id'] = resolveConfigModel(defaults.quick_model, 'default_models.quick_model')
   }
 
   if (Object.keys(updates).length === 0) return
@@ -229,6 +235,25 @@ async function applyDefaultModels(config: EnterpriseClientConfig, result: ApplyE
   // updates the in-memory cache + notifies renderers, unlike a bare DB write.
   await application.get('PreferenceService').setMultiple(updates)
   result.defaultModelsSet = Object.keys(updates).length
+}
+
+/**
+ * Mark first-run onboarding complete on the enterprise pipeline's behalf.
+ * Called after default models land during an apply, and by the sync service's
+ * 304 'touch' branch — a config that is unchanged server-side must still
+ * migrate a pre-existing local install off the「连接 CherryIN」dialog. Writes
+ * only what `computeEnterpriseOnboardingUpdates` says is missing, so repeated
+ * calls stay no-ops. Returns whether anything was written.
+ */
+export async function ensureOnboardingCompleted(): Promise<boolean> {
+  const preferenceService = application.get('PreferenceService')
+  const updates = computeEnterpriseOnboardingUpdates(
+    preferenceService.get('app.onboarding.provider_setup.status'),
+    preferenceService.get('app.privacy.policy_version')
+  )
+  if (!updates) return false
+  await preferenceService.setMultiple(updates)
+  return true
 }
 
 /** Resolve a config model reference and require the model row to exist (fail fast on misconfiguration). */
@@ -258,7 +283,8 @@ async function applyMcpServers(config: EnterpriseClientConfig, result: ApplyEnte
     // Match the logical name first, then the namespaced storage name so a
     // repeated apply UPDATES the `[企业] …` row instead of duplicating it.
     const existing =
-      mcpServerService.findByIdOrName(item.name) ?? mcpServerService.findByIdOrName(withEnterpriseMcpNamePrefix(item.name))
+      mcpServerService.findByIdOrName(item.name) ??
+      mcpServerService.findByIdOrName(withEnterpriseMcpNamePrefix(item.name))
 
     if (existing) {
       mcpServerService.update(existing.id, {
@@ -352,7 +378,8 @@ function mergeAssistantSettings(item: EnterpriseAssistantConfig): AssistantSetti
 
 function resolveMcpServerId(logicalName: string, assistantName: string): string {
   const server =
-    mcpServerService.findByIdOrName(logicalName) ?? mcpServerService.findByIdOrName(withEnterpriseMcpNamePrefix(logicalName))
+    mcpServerService.findByIdOrName(logicalName) ??
+    mcpServerService.findByIdOrName(withEnterpriseMcpNamePrefix(logicalName))
   if (!server) {
     throw new Error(`assistants.${assistantName}: references unknown mcp server '${logicalName}'`)
   }
@@ -411,9 +438,7 @@ function upsertUndeclaredPreferenceRow(key: string, value: unknown): void {
     if (existing) {
       tx.update(preferenceTable).set({ value }).where(filter).run()
     } else {
-      tx.insert(preferenceTable)
-        .values({ scope: PREFERENCE_SCOPE_DEFAULT, key, value })
-        .run()
+      tx.insert(preferenceTable).values({ scope: PREFERENCE_SCOPE_DEFAULT, key, value }).run()
     }
   })
 }
@@ -432,7 +457,10 @@ async function applyKbEntries(config: EnterpriseClientConfig, result: ApplyEnter
  * config (empty array when nothing is managed), so ids of assistants the
  * config stopped managing are dropped on the next sync.
  */
-async function applyManagedAssistantIds(managedAssistantIds: string[], result: ApplyEnterpriseConfigResult): Promise<void> {
+async function applyManagedAssistantIds(
+  managedAssistantIds: string[],
+  result: ApplyEnterpriseConfigResult
+): Promise<void> {
   upsertUndeclaredPreferenceRow(ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY, managedAssistantIds)
   result.managedAssistantIdsRecorded = managedAssistantIds.length
 }

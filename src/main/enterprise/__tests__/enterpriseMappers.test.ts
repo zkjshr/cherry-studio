@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import { LATEST_PRIVACY_POLICY_VERSION } from '@shared/utils/constants'
+
 import {
+  computeEnterpriseOnboardingUpdates,
   computeModelReconcileDiff,
   parseEnterpriseModelRef,
   sanitizeEnterpriseAppId,
@@ -120,5 +123,37 @@ describe('computeModelReconcileDiff', () => {
 
   it('ignores duplicates within the desired list (set semantics)', () => {
     expect(computeModelReconcileDiff(['m1'], ['m1', 'm1'])).toEqual({ toAddIds: [], toRemoveIds: [] })
+  })
+})
+
+describe('computeEnterpriseOnboardingUpdates', () => {
+  it('completes setup and fills the privacy version on a fresh install (pending + empty)', () => {
+    expect(computeEnterpriseOnboardingUpdates('pending', '')).toEqual({
+      'app.onboarding.provider_setup.status': 'completed',
+      'app.privacy.policy_version': LATEST_PRIVACY_POLICY_VERSION
+    })
+  })
+
+  it('treats an unexpected status value as not yet settled (DB rows can be corrupt)', () => {
+    expect(computeEnterpriseOnboardingUpdates(undefined, undefined)).toEqual({
+      'app.onboarding.provider_setup.status': 'completed',
+      'app.privacy.policy_version': LATEST_PRIVACY_POLICY_VERSION
+    })
+  })
+
+  it('keeps a status the user already settled', () => {
+    expect(computeEnterpriseOnboardingUpdates('skipped', '')).toEqual({
+      'app.privacy.policy_version': LATEST_PRIVACY_POLICY_VERSION
+    })
+  })
+
+  it('keeps a recorded privacy version so a future policy bump still surfaces the update gate', () => {
+    expect(computeEnterpriseOnboardingUpdates('pending', '20250101')).toEqual({
+      'app.onboarding.provider_setup.status': 'completed'
+    })
+  })
+
+  it('returns null when nothing needs writing — repeated applies stay no-ops', () => {
+    expect(computeEnterpriseOnboardingUpdates('completed', LATEST_PRIVACY_POLICY_VERSION)).toBeNull()
   })
 })

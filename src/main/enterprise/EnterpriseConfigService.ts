@@ -6,7 +6,7 @@ import { userProviderTable } from '@data/db/schemas/userProvider'
 import { mcpServerService } from '@data/services/McpServerService'
 import { loggerService } from '@logger'
 import { BaseService, DependsOn, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
-import { applyEnterpriseConfig } from '@main/enterprise/applyEnterpriseConfig'
+import { applyEnterpriseConfig, ensureOnboardingCompleted } from '@main/enterprise/applyEnterpriseConfig'
 import { validateEnterpriseConfigPayload, type EnterpriseClientConfig } from '@main/enterprise/enterpriseConfigTypes'
 import type { EnterpriseSyncState } from '@main/enterprise/enterpriseSettings'
 import {
@@ -137,6 +137,10 @@ export class EnterpriseConfigService extends BaseService {
         return
       case 'touch': {
         logger.info('Enterprise config unchanged (304)')
+        // 304 不重新 apply，但本地首装 onboarding 收尾仍要补齐（见 ensureOnboardingCompleted）
+        if (await ensureOnboardingCompleted()) {
+          logger.info('Enterprise onboarding completion written (304 touch path)')
+        }
         await saveEnterpriseStateSafe({ ...state, lastSyncedAt: new Date().toISOString() })
         return
       }
