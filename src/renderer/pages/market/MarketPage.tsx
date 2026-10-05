@@ -1,9 +1,41 @@
-import { ArrowLeft, CircleAlert, ExternalLink, Loader2, PackageOpen, Sparkles, Star, Store, User } from 'lucide-react'
+import {
+  ArrowLeft,
+  CircleAlert,
+  ExternalLink,
+  Loader2,
+  MoreHorizontal,
+  PackageOpen,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Star,
+  Store,
+  Trash2,
+  User,
+  X
+} from 'lucide-react'
 import type { FC } from 'react'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Badge, Button, EmptyState, Spinner } from '@cherrystudio/ui'
+import {
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  EmptyState,
+  Input,
+  Spinner,
+  Tooltip
+} from '@cherrystudio/ui'
 import { Navbar, NavbarCenter } from '@renderer/components/Navbar'
 import Scrollbar from '@renderer/components/Scrollbar'
 import { toast } from '@renderer/services/toast'
@@ -19,31 +51,11 @@ import type {
 /** The manifest categories the UI has localized names for; anything else falls into `other`. */
 const KNOWN_CATEGORY_KEYS = ['knowledge', 'productivity', 'utilities'] as const
 
-/** Seconds before an armed uninstall confirm disarms itself. */
-const UNINSTALL_CONFIRM_RESET_SECONDS = 3
+/** Collapsed category groups show this many cards; the rest waits behind the 展开 row. */
+const CATEGORY_VISIBLE_LIMIT = 6
 
 /** Page-level navigation: the market grid or a drill-in plugin detail. */
 type MarketView = { page: 'grid' } | { page: 'detail'; id: string }
-
-const ComponentCountBadges: FC<{ plugin: Pick<MarketCatalogPlugin, 'components'> }> = ({ plugin }) => {
-  const { t } = useTranslation()
-  const entries = [
-    { count: plugin.components.skills, key: 'market.component.skill' },
-    { count: plugin.components.mcp_servers, key: 'market.component.mcp_server' },
-    { count: plugin.components.assistants, key: 'market.component.assistant' },
-    { count: plugin.components.minapps, key: 'market.component.minapp' }
-  ].filter((entry) => entry.count > 0)
-  if (entries.length === 0) return null
-  return (
-    <div className="flex flex-wrap items-center gap-1" data-ui="market.card.counts">
-      {entries.map((entry) => (
-        <Badge key={entry.key} variant="secondary" className="text-[11px] font-normal">
-          {entry.count} {t(entry.key)}
-        </Badge>
-      ))}
-    </div>
-  )
-}
 
 const PluginIcon: FC<{ iconUrl?: string; size?: number; className?: string }> = ({ iconUrl, size = 36, className }) =>
   iconUrl ? (
@@ -64,131 +76,215 @@ const PluginIcon: FC<{ iconUrl?: string; size?: number; className?: string }> = 
     </span>
   )
 
-/** One installed plugin chip in the top strip. Uninstall uses an inline two-stage confirm. */
-const InstalledChip: FC<{ record: MarketInstalledRecord; onUninstalled: () => void }> = ({ record, onUninstalled }) => {
+/** ZCode 风格搜索框：左侧放大镜、右侧清空按钮。 */
+const MarketSearchInput: FC<{
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+}> = ({ value, onChange, placeholder }) => (
+  <div className="relative" data-ui="market.search">
+    <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+    <Input
+      type="search"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      className="h-9 rounded-xl pr-9 pl-9 [&::-webkit-search-cancel-button]:appearance-none"
+    />
+    {value && (
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="clear"
+        className="absolute top-1/2 right-1 -translate-y-1/2 rounded-full text-muted-foreground"
+        onClick={() => onChange('')}>
+        <X className="size-3.5" />
+      </Button>
+    )}
+  </div>
+)
+
+/**
+ * ZCode 风格分节标题：h2 + 一条分隔线，内容另起。
+ * 与散落边框卡不同，分节靠这条线维持长列表的视觉节奏。
+ */
+const StoreSection: FC<{ title: string; icon?: React.ReactNode; children: React.ReactNode; sectionKey?: string }> = ({
+  title,
+  icon,
+  children,
+  sectionKey
+}) => (
+  <section className="flex flex-col" data-ui="market.section" data-section={sectionKey}>
+    <div className="flex items-center gap-1.5 pb-2">
+      {icon}
+      <h2 className="text-base font-semibold text-foreground">{title}</h2>
+    </div>
+    <div aria-hidden className="h-px bg-border" />
+    <div className="mt-2">{children}</div>
+  </section>
+)
+
+/** ZCode 风格横向卡片（双列网格单元）：图标 + 名称 + 单行描述，尾部安装胶囊或「…」菜单。 */
+const MarketCard: FC<{
+  plugin: MarketCatalogPlugin
+  installed: boolean
+  installing: boolean
+  onOpen: (plugin: MarketCatalogPlugin) => void
+  onInstall: (pluginId: string) => void
+  onRequestUninstall: (plugin: MarketCatalogPlugin) => void
+}> = ({ plugin, installed, installing, onOpen, onInstall, onRequestUninstall }) => {
   const { t } = useTranslation()
-  const [expanded, setExpanded] = useState(false)
-  const [armed, setArmed] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const disarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(
-    () => () => {
-      if (disarmTimer.current) clearTimeout(disarmTimer.current)
-    },
-    []
-  )
-
-  const disarm = useCallback(() => {
-    if (disarmTimer.current) clearTimeout(disarmTimer.current)
-    disarmTimer.current = null
-    setArmed(false)
-  }, [])
-
-  const handleUninstallClick = useCallback(async () => {
-    // Two-stage: first click arms, second click (or re-arm after timeout) executes.
-    if (!armed) {
-      setArmed(true)
-      disarmTimer.current = setTimeout(disarm, UNINSTALL_CONFIRM_RESET_SECONDS * 1000)
-      return
-    }
-    disarm()
-    setBusy(true)
-    try {
-      const result = await window.api.market.uninstall(record.pluginId)
-      if (result.ok) {
-        toast.success(t('market.uninstallSuccess', { name: record.name }))
-        onUninstalled()
-      } else {
-        const failed = result.results.find((entry) => entry.status === 'failed')
-        toast.error(failed?.error ? `${t('market.uninstallFailed')}: ${failed.error}` : t('market.uninstallFailed'))
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('market.uninstallFailed'))
-    } finally {
-      setBusy(false)
-    }
-  }, [armed, disarm, onUninstalled, record.name, record.pluginId, t])
-
   return (
     <div
-      data-ui="market.installed-chip"
-      className={cn(
-        'flex min-w-0 items-center gap-2 rounded-xl border bg-card px-3 py-2 transition-colors',
-        expanded ? 'border-primary/40' : 'cursor-pointer hover:border-primary/40'
-      )}
-      onClick={() => !expanded && setExpanded(true)}>
-      <PluginIcon size={24} />
-      <div className="flex min-w-0 flex-col">
-        <span className="truncate text-[13px] font-medium">{record.name || record.pluginId}</span>
-        <span className="text-[11px] text-muted-foreground">v{record.version || '-'}</span>
-      </div>
-      {expanded && (
-        <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
-          <Button variant={armed ? 'destructive' : 'ghost'} size="sm" disabled={busy} onClick={handleUninstallClick}>
-            {busy ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              t(armed ? 'market.uninstallConfirm' : 'market.uninstall')
-            )}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setExpanded(false)}>
-            {t('common.cancel')}
-          </Button>
+      role="button"
+      tabIndex={0}
+      data-ui="market.card"
+      className="flex min-w-0 cursor-pointer items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+      onClick={() => onOpen(plugin)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onOpen(plugin)
+        }
+      }}>
+      <PluginIcon iconUrl={plugin.iconUrl} size={40} className="shrink-0" />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="min-w-0 truncate text-sm font-semibold">{plugin.name}</span>
+          {installed && (
+            <Badge variant="outline" className="shrink-0 text-[11px] font-normal text-emerald-600">
+              {t('market.installedBadge')}
+            </Badge>
+          )}
         </div>
-      )}
+        {plugin.description && (
+          <div className="mt-0.5 truncate text-xs text-muted-foreground">{plugin.description}</div>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {installed ? (
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t('market.actions')}
+                data-ui="market.card.menu"
+                onClick={(event) => event.stopPropagation()}>
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={(event) => {
+                  // Radix 把菜单 portal 到卡片外，事件本就冒泡不到卡片；内联渲染的
+                  // 场景（测试桩）里这句防止点菜单项误触发卡片的详情跳转。
+                  event.stopPropagation()
+                  onRequestUninstall(plugin)
+                }}>
+                <Trash2 />
+                {t('market.uninstall')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="rounded-full"
+            disabled={installing}
+            data-ui="market.card.install"
+            onClick={(event) => {
+              event.stopPropagation()
+              onInstall(plugin.id)
+            }}>
+            {installing ? <Loader2 className="size-3.5 animate-spin" /> : null}
+            {t(installing ? 'market.installing' : 'market.install')}
+          </Button>
+        )}
+      </div>
     </div>
   )
 }
 
-const PluginCard: FC<{
-  plugin: MarketCatalogPlugin
-  installed: boolean
+/** 双列卡片网格：行距收到 gap-y-1，让横向卡片像列表条目一样密排。 */
+const CardGrid: FC<{
+  items: MarketCatalogPlugin[]
+  installedIds: Set<string>
+  installingId: string | null
   onOpen: (plugin: MarketCatalogPlugin) => void
-}> = ({ plugin, installed, onOpen }) => {
-  const { t } = useTranslation()
-  return (
-    <button
-      type="button"
-      data-ui="market.card"
-      onClick={() => onOpen(plugin)}
-      className="flex w-full cursor-pointer flex-col gap-2 rounded-xl border bg-card p-4 text-left transition-colors hover:border-primary/40">
-      <div className="flex items-start gap-3">
-        <PluginIcon iconUrl={plugin.iconUrl} size={40} />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-medium">{plugin.name}</span>
-            {installed && (
-              <Badge variant="outline" className="shrink-0 text-[11px] font-normal text-emerald-600">
-                {t('market.installedBadge')}
-              </Badge>
-            )}
-          </div>
-          <span className="text-[11px] text-muted-foreground">v{plugin.version || '-'}</span>
-        </div>
-      </div>
-      {plugin.description && (
-        <p className="line-clamp-2 min-h-[2.4em] text-xs leading-relaxed text-muted-foreground">{plugin.description}</p>
-      )}
-      <ComponentCountBadges plugin={plugin} />
-    </button>
-  )
-}
+  onInstall: (pluginId: string) => void
+  onRequestUninstall: (plugin: MarketCatalogPlugin) => void
+}> = ({ items, installedIds, installingId, onOpen, onInstall, onRequestUninstall }) => (
+  <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2" data-ui="market.grid">
+    {items.map((plugin) => (
+      <MarketCard
+        key={plugin.id}
+        plugin={plugin}
+        installed={installedIds.has(plugin.id)}
+        installing={installingId === plugin.id}
+        onOpen={onOpen}
+        onInstall={onInstall}
+        onRequestUninstall={onRequestUninstall}
+      />
+    ))}
+  </div>
+)
 
-const CategorySection: FC<{
-  titleKey: string
-  icon?: React.ReactNode
-  children: React.ReactNode
-}> = ({ titleKey, icon, children }) => {
+/**
+ * 分组折叠：默认完整展开；超过 {@link CATEGORY_VISIBLE_LIMIT} 后收起为前 N 张 +
+ * 一条「展开」行（带被隐藏插件的迷你图标），展开后提供「收起」。
+ */
+const CollapsibleGroup: FC<{
+  groupKey: string
+  items: MarketCatalogPlugin[]
+  expanded: boolean
+  onToggle: (key: string) => void
+  installedIds: Set<string>
+  installingId: string | null
+  onOpen: (plugin: MarketCatalogPlugin) => void
+  onInstall: (pluginId: string) => void
+  onRequestUninstall: (plugin: MarketCatalogPlugin) => void
+}> = ({ groupKey, items, expanded, onToggle, installedIds, installingId, onOpen, onInstall, onRequestUninstall }) => {
   const { t } = useTranslation()
+  const visible = expanded ? items : items.slice(0, CATEGORY_VISIBLE_LIMIT)
+  const hidden = expanded ? [] : items.slice(CATEGORY_VISIBLE_LIMIT)
   return (
-    <section className="flex flex-col gap-3" data-ui="market.category">
-      <h3 className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-        {icon}
-        {t(titleKey)}
-      </h3>
-      {children}
-    </section>
+    <div>
+      <CardGrid
+        items={visible}
+        installedIds={installedIds}
+        installingId={installingId}
+        onOpen={onOpen}
+        onInstall={onInstall}
+        onRequestUninstall={onRequestUninstall}
+      />
+      {hidden.length > 0 ? (
+        <button
+          type="button"
+          data-ui="market.group-toggle"
+          data-group-key={groupKey}
+          className="mt-2 flex w-full min-w-0 items-center gap-2 rounded-xl px-2 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          onClick={() => onToggle(groupKey)}>
+          <span className="flex shrink-0 items-center gap-1.5" aria-hidden>
+            {hidden.slice(0, 3).map((plugin) => (
+              <PluginIcon key={plugin.id} iconUrl={plugin.iconUrl} size={20} />
+            ))}
+          </span>
+          <span className="min-w-0 truncate">{t('market.viewMore', { count: hidden.length })}</span>
+        </button>
+      ) : expanded && items.length > CATEGORY_VISIBLE_LIMIT ? (
+        <button
+          type="button"
+          data-ui="market.group-toggle"
+          data-group-key={groupKey}
+          className="mt-2 rounded-xl px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          onClick={() => onToggle(groupKey)}>
+          {t('market.showLess')}
+        </button>
+      ) : null}
+    </div>
   )
 }
 
@@ -457,13 +553,28 @@ const MarketPage: FC = () => {
     failed: false,
     manifest: null
   })
-  const [installing, setInstalling] = useState(false)
+  const [installingId, setInstallingId] = useState<string | null>(null)
   const [justInstalled, setJustInstalled] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
+  const [uninstallTarget, setUninstallTarget] = useState<{ id: string; name: string } | null>(null)
+  const [uninstalling, setUninstalling] = useState(false)
 
   const installedIds = useMemo(() => new Set(installed.map((record) => record.pluginId)), [installed])
+  const catalogById = useMemo(() => new Map((catalog?.plugins ?? []).map((plugin) => [plugin.id, plugin])), [catalog])
   const featured = useMemo(() => catalog?.plugins.filter((plugin) => plugin.featured) ?? [], [catalog])
   const rest = useMemo(() => catalog?.plugins.filter((plugin) => !plugin.featured) ?? [], [catalog])
   const categories = useMemo(() => groupByCategory(rest), [rest])
+  const keyword = query.trim().toLowerCase()
+  const searchResults = useMemo(() => {
+    if (!keyword) return []
+    return (catalog?.plugins ?? []).filter(
+      (plugin) =>
+        plugin.name.toLowerCase().includes(keyword) ||
+        plugin.id.toLowerCase().includes(keyword) ||
+        (plugin.description ?? '').toLowerCase().includes(keyword)
+    )
+  }, [catalog, keyword])
 
   const refreshInstalled = useCallback(async () => {
     try {
@@ -490,6 +601,11 @@ const MarketPage: FC = () => {
     void refreshInstalled()
   }, [loadCatalog, refreshInstalled])
 
+  const handleRefresh = useCallback(() => {
+    void loadCatalog()
+    void refreshInstalled()
+  }, [loadCatalog, refreshInstalled])
+
   const loadManifest = useCallback(async (pluginId: string) => {
     setDetail({ loading: true, failed: false, manifest: null })
     try {
@@ -500,20 +616,22 @@ const MarketPage: FC = () => {
     }
   }, [])
 
-  const openDetail = useCallback(
-    (plugin: MarketCatalogPlugin) => {
+  const openDetailById = useCallback(
+    (pluginId: string) => {
       setJustInstalled(null)
-      setView({ page: 'detail', id: plugin.id })
-      void loadManifest(plugin.id)
+      setView({ page: 'detail', id: pluginId })
+      void loadManifest(pluginId)
     },
     [loadManifest]
   )
+
+  const openDetail = useCallback((plugin: MarketCatalogPlugin) => openDetailById(plugin.id), [openDetailById])
 
   const backToGrid = useCallback(() => setView({ page: 'grid' }), [])
 
   const handleInstall = useCallback(
     async (pluginId: string) => {
-      setInstalling(true)
+      setInstallingId(pluginId)
       try {
         const result = await window.api.market.install(pluginId)
         // Partial success is still a persisted install — tell the user WHICH
@@ -529,11 +647,36 @@ const MarketPage: FC = () => {
       } catch (error) {
         toast.error(error instanceof Error ? error.message : t('market.installFailed'))
       } finally {
-        setInstalling(false)
+        setInstallingId(null)
       }
     },
     [refreshInstalled, t]
   )
+
+  const confirmUninstall = useCallback(async () => {
+    if (!uninstallTarget) return
+    setUninstalling(true)
+    try {
+      const result = await window.api.market.uninstall(uninstallTarget.id)
+      if (result.ok) {
+        toast.success(t('market.uninstallSuccess', { name: uninstallTarget.name }))
+        setUninstallTarget(null)
+        await refreshInstalled()
+      } else {
+        // Keep the dialog open with the error visible — the record stays installed.
+        const failed = result.results.find((entry) => entry.status === 'failed')
+        toast.error(failed?.error ? `${t('market.uninstallFailed')}: ${failed.error}` : t('market.uninstallFailed'))
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('market.uninstallFailed'))
+    } finally {
+      setUninstalling(false)
+    }
+  }, [refreshInstalled, t, uninstallTarget])
+
+  const toggleGroup = useCallback((key: string) => {
+    setCollapsedGroups((current) => ({ ...current, [key]: !(current[key] ?? false) }))
+  }, [])
 
   const renderCatalogBody = () => {
     if (loading) {
@@ -563,7 +706,7 @@ const MarketPage: FC = () => {
             title={t('market.error.title')}
             description={t('market.error.description')}
             actionLabel={t('market.retry')}
-            onAction={() => void loadCatalog()}
+            onAction={handleRefresh}
             compact
           />
         </div>
@@ -577,41 +720,65 @@ const MarketPage: FC = () => {
             title={t('market.empty.title')}
             description={t('market.empty.description')}
             actionLabel={t('market.retry')}
-            onAction={() => void loadCatalog()}
+            onAction={handleRefresh}
             compact
           />
         </div>
       )
     }
+    if (keyword) {
+      return (
+        <StoreSection title={t('market.searchResults', { count: searchResults.length })} sectionKey="search">
+          {searchResults.length === 0 ? (
+            <p
+              className="rounded-xl border border-dashed px-4 py-3 text-sm text-muted-foreground"
+              data-ui="market.search-empty">
+              {t('market.searchEmpty')}
+            </p>
+          ) : (
+            <CardGrid
+              items={searchResults}
+              installedIds={installedIds}
+              installingId={installingId}
+              onOpen={openDetail}
+              onInstall={handleInstall}
+              onRequestUninstall={(plugin) => setUninstallTarget({ id: plugin.id, name: plugin.name })}
+            />
+          )}
+        </StoreSection>
+      )
+    }
     return (
       <>
         {featured.length > 0 && (
-          <CategorySection titleKey="market.featured" icon={<Star size={14} className="text-amber-500" />}>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" data-ui="market.featured-grid">
-              {featured.map((plugin) => (
-                <PluginCard
-                  key={plugin.id}
-                  plugin={plugin}
-                  installed={installedIds.has(plugin.id)}
-                  onOpen={openDetail}
-                />
-              ))}
-            </div>
-          </CategorySection>
+          <StoreSection
+            title={t('market.featured')}
+            icon={<Star size={14} className="text-amber-500" />}
+            sectionKey="featured">
+            <CardGrid
+              items={featured}
+              installedIds={installedIds}
+              installingId={installingId}
+              onOpen={openDetail}
+              onInstall={handleInstall}
+              onRequestUninstall={(plugin) => setUninstallTarget({ id: plugin.id, name: plugin.name })}
+            />
+          </StoreSection>
         )}
         {categories.map((group) => (
-          <CategorySection key={group.key} titleKey={group.key}>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" data-ui="market.category-grid">
-              {group.plugins.map((plugin) => (
-                <PluginCard
-                  key={plugin.id}
-                  plugin={plugin}
-                  installed={installedIds.has(plugin.id)}
-                  onOpen={openDetail}
-                />
-              ))}
-            </div>
-          </CategorySection>
+          <StoreSection key={group.key} title={t(group.key)} sectionKey={group.key}>
+            <CollapsibleGroup
+              groupKey={group.key}
+              items={group.plugins}
+              expanded={!(collapsedGroups[group.key] ?? false)}
+              onToggle={toggleGroup}
+              installedIds={installedIds}
+              installingId={installingId}
+              onOpen={openDetail}
+              onInstall={handleInstall}
+              onRequestUninstall={(plugin) => setUninstallTarget({ id: plugin.id, name: plugin.name })}
+            />
+          </StoreSection>
         ))}
       </>
     )
@@ -629,21 +796,55 @@ const MarketPage: FC = () => {
 
       {view.page === 'grid' ? (
         <Scrollbar className="min-h-0 flex-1">
-          <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 p-6">
+          <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-6">
+            <div className="flex flex-col gap-2">
+              <h1 className="text-2xl font-semibold tracking-tight" data-ui="market.page-title">
+                {t('market.pageTitle')}
+              </h1>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <p className="min-w-0 flex-1 text-sm leading-6 text-muted-foreground" data-ui="market.subtitle">
+                  {t('market.subtitle')}
+                </p>
+                <Tooltip title={t('market.refresh')}>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    aria-label={t('market.refresh')}
+                    data-ui="market.refresh"
+                    disabled={loading}
+                    onClick={handleRefresh}>
+                    <RefreshCw className={cn('size-4', loading && 'animate-spin')} />
+                  </Button>
+                </Tooltip>
+              </div>
+            </div>
+
+            <MarketSearchInput value={query} onChange={setQuery} placeholder={t('market.searchPlaceholder')} />
+
             {installed.length > 0 && (
-              <section className="flex flex-col gap-3" data-ui="market.installed">
-                <h3 className="text-sm font-medium text-foreground">{t('market.installed.title')}</h3>
-                <div className="flex flex-wrap gap-2">
+              <section className="flex flex-col" data-ui="market.installed">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h2 className="text-base font-semibold text-foreground">{t('market.installed.title')}</h2>
+                </div>
+                <div
+                  className="mt-1 flex items-center gap-3 overflow-x-auto px-2 pt-2 pb-1 sm:-mx-2"
+                  data-ui="market.installed-strip">
                   {installed.map((record) => (
-                    <InstalledChip
-                      key={record.pluginId}
-                      record={record}
-                      onUninstalled={() => void refreshInstalled()}
-                    />
+                    <Tooltip key={record.pluginId} title={record.name || record.pluginId}>
+                      <button
+                        type="button"
+                        data-ui="market.installed-item"
+                        aria-label={record.name || record.pluginId}
+                        className="shrink-0 rounded-xl transition-transform hover:scale-105 focus-visible:outline-none"
+                        onClick={() => openDetailById(record.pluginId)}>
+                        <PluginIcon iconUrl={catalogById.get(record.pluginId)?.iconUrl} size={40} />
+                      </button>
+                    </Tooltip>
                   ))}
                 </div>
               </section>
             )}
+
             {renderCatalogBody()}
           </div>
         </Scrollbar>
@@ -654,12 +855,34 @@ const MarketPage: FC = () => {
           failed={detail.failed}
           installed={detailInstalled}
           installSucceeded={detailInstallSucceeded}
-          installing={installing}
-          onInstall={() => detail.manifest && void handleInstall(detail.manifest.id)}
+          installing={installingId === detailPluginId}
+          onInstall={() => detailPluginId && void handleInstall(detailPluginId)}
           onBack={backToGrid}
           onRetry={() => detailPluginId && void loadManifest(detailPluginId)}
         />
       )}
+
+      <Dialog
+        open={uninstallTarget !== null}
+        onOpenChange={(open) => !open && !uninstalling && setUninstallTarget(null)}>
+        <DialogContent size="sm" showCloseButton={false} data-ui="market.uninstall-dialog">
+          <DialogHeader>
+            <DialogTitle>{t('market.uninstallConfirmTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('market.uninstallConfirmDescription', { name: uninstallTarget?.name ?? '' })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={uninstalling} onClick={() => setUninstallTarget(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button variant="destructive" disabled={uninstalling} onClick={() => void confirmUninstall()}>
+              {uninstalling ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : null}
+              {t('market.uninstallConfirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

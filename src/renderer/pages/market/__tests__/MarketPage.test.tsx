@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { toast } from '@renderer/services/toast'
@@ -133,7 +134,8 @@ describe('MarketPage detail drill-in', () => {
     expect(screen.getByRole('button', { name: 'market.install' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'market.detail.back' }))
-    expect(screen.queryByRole('button', { name: 'market.install' })).not.toBeInTheDocument()
+    // Back on the grid: the detail heading is gone and the catalog card is back.
+    expect(screen.queryByRole('heading', { name: 'P1' })).not.toBeInTheDocument()
     expect(await screen.findByText('P1', { selector: '[data-ui="market.card"] span' })).toBeInTheDocument()
   })
 
@@ -195,7 +197,8 @@ describe('MarketPage install toasts', () => {
 })
 
 describe('MarketPage uninstall', () => {
-  it('keeps the installed chip and shows the error when a component failed', async () => {
+  it('uninstalls via the card menu confirm dialog and surfaces component failures', async () => {
+    const user = userEvent.setup()
     marketApi.getInstalled.mockResolvedValue([installedRecord()])
     marketApi.uninstall.mockResolvedValue({
       pluginId: 'p1',
@@ -206,15 +209,75 @@ describe('MarketPage uninstall', () => {
       ok: false
     })
     render(<MarketPage />)
-    // Two-stage inline confirm: expand (the chip, not the catalog card of the same name), arm, execute.
-    const chip = await screen.findByText('P1', { selector: '[data-ui="market.installed-chip"] span' })
-    fireEvent.click(chip)
-    fireEvent.click(await screen.findByRole('button', { name: 'market.uninstall' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'market.uninstallConfirm' }))
+    // Installed card shows the「…」menu; the item is a plain button under the UI stub.
+    await user.click(await screen.findByRole('button', { name: 'market.actions' }))
+    await user.click(await screen.findByRole('button', { name: 'market.uninstall' }))
+    // Confirm dialog: description then the destructive confirm button.
+    expect(await screen.findByText('market.uninstallConfirmDescription')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'market.uninstallConfirm' }))
     await waitFor(() => expect(marketApi.uninstall).toHaveBeenCalledWith('p1'))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('sqlite busy')))
-    // The record was kept (uninstall reported failure) — the chip must survive.
-    expect(screen.getByText('P1', { selector: '[data-ui="market.installed-chip"] span' })).toBeInTheDocument()
+    // Failure keeps the record installed — the strip icon survives and no refresh happened.
+    expect(screen.getByRole('button', { name: 'P1' })).toBeInTheDocument()
     expect(marketApi.getInstalled).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes the dialog and refreshes the strip after a successful uninstall', async () => {
+    const user = userEvent.setup()
+    marketApi.getInstalled.mockResolvedValue([installedRecord()])
+    marketApi.uninstall.mockResolvedValue({
+      pluginId: 'p1',
+      results: [{ kind: 'mcp_server', target: 'm1', status: 'removed' }],
+      ok: true
+    })
+    render(<MarketPage />)
+    await user.click(await screen.findByRole('button', { name: 'market.actions' }))
+    await user.click(await screen.findByRole('button', { name: 'market.uninstall' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'market.uninstallConfirm' }))
+    await waitFor(() => expect(marketApi.uninstall).toHaveBeenCalledWith('p1'))
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('market.uninstallSuccess'))
+    // The dialog is gone and the strip re-read.
+    await waitFor(() => expect(screen.queryByText('market.uninstallConfirmTitle')).not.toBeInTheDocument())
+    expect(marketApi.getInstalled).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('MarketPage search', () => {
+  it('narrows the grid to matching plugins while the query is set', async () => {
+    marketApi.getCatalog.mockResolvedValue({
+      source: 'gateway',
+      plugins: [catalogEntry, { ...catalogEntry, id: 'p2', name: 'P2', description: '知识检索增强' }],
+      warnings: []
+    })
+    render(<MarketPage />)
+    expect(await screen.findByText('P1', { selector: '[data-ui="market.card"] span' })).toBeInTheDocument()
+    const search = screen.getByPlaceholderText('market.searchPlaceholder')
+    fireEvent.change(search, { target: { value: 'p2' } })
+    expect(await screen.findByText('P2', { selector: '[data-ui="market.card"] span' })).toBeInTheDocument()
+    expect(screen.queryByText('P1', { selector: '[data-ui="market.card"] span' })).not.toBeInTheDocument()
+  })
+})
+
+describe('MarketPage category collapse', () => {
+  it('shows all cards by default, 收起 caps the group at six, 展开 restores', async () => {
+    marketApi.getCatalog.mockResolvedValue({
+      source: 'gateway',
+      plugins: Array.from({ length: 8 }, (_, index) => ({
+        ...catalogEntry,
+        id: `p${index}`,
+        name: `P${index}`,
+        category: 'utilities'
+      })),
+      warnings: []
+    })
+    render(<MarketPage />)
+    await screen.findByText('P0', { selector: '[data-ui="market.card"] span' })
+    // ZCode 行为：默认完整展开，超过六个出现「收起」。
+    expect(document.querySelectorAll('[data-ui="market.card"]').length).toBe(8)
+    fireEvent.click(screen.getByText('market.showLess'))
+    expect(document.querySelectorAll('[data-ui="market.card"]').length).toBe(6)
+    expect(screen.getByText('market.viewMore')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('market.viewMore'))
+    expect(document.querySelectorAll('[data-ui="market.card"]').length).toBe(8)
   })
 })
