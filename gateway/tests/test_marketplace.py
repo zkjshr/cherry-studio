@@ -79,6 +79,38 @@ def test_catalog_scans_plugins_and_counts_sorted_by_name(market_dir):
     assert card["icon"] == "icon.png"
     # 组件计数：只数清单，不校验 zip 文件是否真实存在
     assert card["components"] == {"skills": 1, "mcp_servers": 1, "assistants": 1, "minapps": 1}
+    # 展示元数据缺省值：plugin.json 未写时给空串，客户端按可选字段隐藏
+    assert card["author"] == "" and card["department"] == ""
+
+
+def test_catalog_passes_through_author_department_but_not_downloads(market_dir):
+    """下载热度仅管理端可见：客户端目录不带 downloads 字段。"""
+    _plugin(market_dir, "hot", author="知开始", department="数字研发中心", downloads=128)
+    resp = client.get("/marketplace/api/catalog", headers=CLIENT)
+    assert resp.status_code == 200
+    card = resp.json()["plugins"][0]
+    assert card["author"] == "知开始"
+    assert card["department"] == "数字研发中心"
+    assert "downloads" not in card
+
+
+def test_admin_marketplace_lists_metadata_with_downloads(market_dir):
+    _plugin(market_dir, "hot", author="知开始", department="数字研发中心", downloads=128)
+    _plugin(market_dir, "bad", downloads="not-a-number")
+    (market_dir / "broken").mkdir()
+    (market_dir / "broken" / "plugin.json").write_text("{oops", encoding="utf-8")
+    resp = client.get("/admin/api/marketplace", headers=ADMIN)
+    assert resp.status_code == 200
+    rows = {p["id"]: p for p in resp.json()["plugins"]}
+    assert rows["hot"]["name"] == "Hot"
+    assert rows["hot"]["department"] == "数字研发中心"
+    assert rows["hot"]["author"] == "知开始"
+    assert rows["hot"]["downloads"] == 128
+    assert rows["hot"]["valid"] is True
+    # 非法 downloads 回退 0；无效目录 validity=False 但不打挂列表
+    assert rows["bad"]["downloads"] == 0
+    assert rows["broken"]["valid"] is False
+    assert rows["broken"]["downloads"] == 0
 
 
 def test_catalog_warns_and_skips_invalid_plugins(market_dir):
@@ -201,6 +233,10 @@ def test_admin_marketplace_lists_validity_and_requires_token(market_dir):
     assert resp.status_code == 200
     body = resp.json()
     assert body["dir"] == str(d)
-    assert body["plugins"] == [{"id": "bad", "valid": False, "error": body["plugins"][0]["error"]},
-                               {"id": "good", "valid": True, "error": None}]
-    assert "plugin.json unreadable" in body["plugins"][0]["error"]
+    rows = {p["id"]: p for p in body["plugins"]}
+    assert set(rows) == {"bad", "good"}
+    assert rows["bad"]["valid"] is False and rows["bad"]["error"] is not None
+    assert rows["good"]["valid"] is True and rows["good"]["error"] is None
+    # 展示元数据随行携带（downloads 仅此处可见）
+    assert rows["good"]["name"] == "Good" and rows["good"]["downloads"] == 0
+    assert "plugin.json unreadable" in rows["bad"]["error"]

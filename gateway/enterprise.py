@@ -916,6 +916,7 @@ _ADMIN_HTML = """<!doctype html>
   <button data-tab="mcp">MCP</button>
   <button data-tab="minapps">小程序</button>
   <button data-tab="kbs">知识库</button>
+  <button data-tab="market">插件市场</button>
   <button data-tab="usage">用量</button>
   <button data-tab="versions">版本</button>
 </nav>
@@ -1049,6 +1050,17 @@ _ADMIN_HTML = """<!doctype html>
     <label class="check"><input id="kb-recent" type="checkbox">启用「最近知识」入口（recent_enabled）</label>
     <div id="kb-list" class="checks"><span class="muted">尚未加载。</span></div>
     <div class="row"><button class="primary" data-action="save-kbs">保存知识库设置</button></div>
+  </div>
+</section>
+<section id="tab-market">
+  <div class="card">
+    <div class="bar"><h2>插件市场目录</h2><span class="grow"></span>
+      <button data-action="load-market">刷新</button></div>
+    <p class="muted">目录每次请求现扫；上架/更新走 scp 放文件到下方目录。下载热度（plugin.json 的 downloads）仅此处可见，不下发客户端。</p>
+    <p class="mono" id="market-dir">尚未加载。</p>
+    <table><thead><tr>
+      <th>插件</th><th>版本</th><th>部门</th><th>作者</th><th>下载次数</th><th>状态</th>
+    </tr></thead><tbody id="market-tbody"></tbody></table>
   </div>
 </section>
 <section id="tab-usage">
@@ -1553,6 +1565,23 @@ async function saveKbs() {
   await loadKbs();
 }
 
+// ---------- 插件市场 ----------
+
+async function loadMarket() {
+  const data = await api("GET", "/admin/api/marketplace");
+  $("market-dir").textContent = data.dir;
+  $("market-tbody").innerHTML = data.plugins.length
+    ? data.plugins.map((p) => `<tr>
+        <td>${esc(p.name || p.id)}</td>
+        <td class="mono">${esc(p.version || "-")}</td>
+        <td>${esc(p.department || "-")}</td>
+        <td>${esc(p.author || "-")}</td>
+        <td class="mono">${p.downloads}</td>
+        <td>${p.valid ? "✅ 有效" : "❌ " + esc(p.error || "无效")}</td>
+      </tr>`).join("")
+    : '<tr><td colspan="6" class="muted">（目录为空）</td></tr>';
+}
+
 // ---------- 用量 ----------
 
 async function loadUsage() {
@@ -1615,7 +1644,7 @@ async function publishConfig() {
 
 const LOADERS = {
   upstreams: loadUpstreams, defaults: loadDefaults, assistants: loadAssistants,
-  mcp: loadMcps, minapps: loadMinapps, kbs: loadKbs, usage: loadUsage, versions: loadVersions,
+  mcp: loadMcps, minapps: loadMinapps, kbs: loadKbs, market: loadMarket, usage: loadUsage, versions: loadVersions,
 };
 
 async function switchTab(name) {
@@ -1670,6 +1699,7 @@ const ACTIONS = {
   "del-minapp": (el) => { if (armedConfirm(el, "删除")) run(el, () => deleteMinapp(el.dataset.id)); },
   "save-kbs": (el) => run(el, saveKbs),
   "load-usage": (el) => run(el, loadUsage),
+  "load-market": (el) => run(el, loadMarket),
   "load-published": (el) => run(el, loadVersions),
   "rollback": (el) => { if (armedConfirm(el, "回滚")) run(el, () => rollback(el)); },
 };

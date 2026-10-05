@@ -95,7 +95,12 @@ def _scan() -> list[dict]:
 
 
 def _summary(manifest: dict) -> dict:
-    """manifest → 目录卡片摘要：标量字段 + 四类组件计数（组件明细走 detail 端点）。"""
+    """manifest → 目录卡片摘要：标量字段 + 四类组件计数（组件明细走 detail 端点）。
+
+    author/department 为卡片展示用的可选元数据：plugin.json 有则透传，缺省给
+    空串（客户端同样按可选处理，旧网关与新客户端可混跑）。downloads 不对客户端
+    下发——下载热度仅管理端可见（/admin/api/marketplace 携带）。
+    """
     return {
         "id": manifest.get("id") or "",
         "name": manifest.get("name") or "",
@@ -104,11 +109,23 @@ def _summary(manifest: dict) -> dict:
         "category": manifest.get("category") or "",
         "featured": manifest.get("featured") is True,
         "icon": manifest.get("icon") or "",
+        "author": manifest.get("author") or "",
+        "department": manifest.get("department") or "",
         "components": {
             k: len(manifest[k]) if isinstance(manifest.get(k), list) else 0
             for k in _COMPONENT_KEYS
         },
     }
+
+
+def _admin_downloads(manifest: dict | None) -> int:
+    """管理端视图的下载热度：非法值一律回退 0，不让一张坏卡片打挂列表。"""
+    if not manifest:
+        return 0
+    try:
+        return int(manifest.get("downloads") or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _require_client_token(x_client_token: str = Header(default="")) -> None:
@@ -167,9 +184,21 @@ def plugin_file(pid: str, path: str) -> FileResponse:
 
 @router.get("/admin/api/marketplace", dependencies=[Depends(_require_admin_token)])
 def admin_marketplace() -> dict:
-    """管理员核对市场目录：逐目录列出有效性与原因；上架/更新仍走 scp 放文件（与 downloads
+    """管理员核对市场目录：逐目录列出有效性、原因与展示元数据（含下载热度——
+    热度仅此处可见，客户端目录不下发）；上架/更新仍走 scp 放文件（与 downloads
     同范式），本端点只读。"""
     entries = _scan()
-    return {"dir": _marketplace_dir(),
-            "plugins": [{"id": e["id"], "valid": e["error"] is None, "error": e["error"]}
-                        for e in entries]}
+    plugins = []
+    for e in entries:
+        manifest = e["manifest"] or {}
+        plugins.append({
+            "id": e["id"],
+            "valid": e["error"] is None,
+            "error": e["error"],
+            "name": manifest.get("name") or "",
+            "version": manifest.get("version") or "",
+            "department": manifest.get("department") or "",
+            "author": manifest.get("author") or "",
+            "downloads": _admin_downloads(e["manifest"]),
+        })
+    return {"dir": _marketplace_dir(), "plugins": plugins}
