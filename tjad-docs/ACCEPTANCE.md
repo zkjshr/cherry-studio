@@ -295,3 +295,9 @@ Release profile（`Cargo.toml`）：`strip = true`、`lto = true`、`opt-level =
 - 生产部署（66.12）：网关更新 world_url 契约（v8 已发布 world_url=ZT:8788）；world 服务 ~/tjad-world（start-world.sh，:8788）
 - E2E：客户端心跳 → world health online:1；模拟第二玩家 join/pos/chat → players:2 + 聊天回显 ✓
 - 提交：67de9ba(W1a) 6b5323e(W1b) 62acb28+80f4806(W1c) 已推送
+
+### 服务转本机部署（2026-10-05，用户决定）
+
+- 66.12 服务器部署撤除（~/tjad-gateway ~/tjad-world 已清）；全套服务跑开发机本机 127.0.0.1:8787（网关，含迁移回的企业配置库/市场/下载）+ :8788（小世界）
+- 一键启动：scripts/start-services.sh；配置 v9 全部 127.0.0.1 地址；打包默认地址同步切换
+- 注意：本机部署 = 仅本机可达（127.0.0.1）；如需他人访问，起服务时 --host 0.0.0.0 + 换 TJADKnows ZT IP（10.121.16.83）即可，服务器历史部署方式见 git 历史
