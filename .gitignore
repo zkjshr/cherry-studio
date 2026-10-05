@@ -101,3 +101,9 @@ YOUR_MEMORY_FILE_PATH
 .sessions/
 .devtools
 .omo/
+
+# 小世界（Little World）
+world/data/
+world/frontend/dist/
+world/server/node_modules/
+world/frontend/node_modules/
