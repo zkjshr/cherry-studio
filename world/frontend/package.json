@@ -1,0 +1,23 @@
+{
+  "name": "world-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "小世界（Little World）Three.js 前端：虚拟设计院园区 / 化身同步 / 聊天（PRD 2026-10-05-little-world §4/§5）",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "dev": "vite",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}
