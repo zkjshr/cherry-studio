@@ -908,3 +908,38 @@ export function getKnowledgeItemConflictKey(item: KnowledgeItemTitleSource): str
       return (data.url || '').trim()
   }
 }
+
+// ── 企业共享知识库（网关 /knowledge/api/kbs 下发，客户端只读） ──
+
+/**
+ * One enterprise shared knowledge base as the gateway lists it. `scope` is the
+ * gateway's dept/public classification (`^\d{3}-` name prefix = a department
+ * library); the client never re-classifies.
+ */
+export const SharedKnowledgeBaseSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  scope: z.enum(['dept', 'public'])
+})
+export type SharedKnowledgeBase = z.infer<typeof SharedKnowledgeBaseSchema>
+
+/**
+ * The gateway response shape — exactly what `/knowledge/api/kbs` sends. The
+ * gateway carries no `chatTopicId`; main resolves it locally (the pinned
+ * knowledge topic of the first managed assistant) after this parse succeeds,
+ * so it is deliberately absent here — parsing the wire format with the IPC
+ * payload schema below would always fail.
+ */
+export const GatewaySharedKbsResponseSchema = z.object({
+  kbs: z.array(SharedKnowledgeBaseSchema)
+})
+
+/**
+ * IPC output of `knowledge.list_shared_kbs`: the gateway kbs plus the locally
+ * resolved jump target for the detail page's 去对话检索 action.
+ */
+export const SharedKnowledgeBasesPayloadSchema = GatewaySharedKbsResponseSchema.extend({
+  /** 第一个有置顶话题的受管助手的话题 id；详情页"去对话检索"用。 */
+  chatTopicId: z.string().nullable()
+})
+export type SharedKnowledgeBasesPayload = z.infer<typeof SharedKnowledgeBasesPayloadSchema>

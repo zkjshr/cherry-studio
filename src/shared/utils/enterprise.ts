@@ -20,6 +20,16 @@ export const ENTERPRISE_MCP_NAME_PREFIX = '[企业] '
 export const ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY = 'enterprise.managed_assistant_ids'
 
 /**
+ * Preference key (scope `default`) holding the enterprise pinned-topic mapping
+ * (`assistantId -> { topicId }`) — the conversation the gateway ships with a
+ * managed assistant, created and pinned by the enterprise config applier. Read
+ * by the knowledge shared-KB service to resolve the detail page's「去对话检索」
+ * jump target. Shared so the writer and the reader cannot drift on the row's
+ * name or shape (same pattern as `ENTERPRISE_WORLD_URL_KEY`).
+ */
+export const ENTERPRISE_PINNED_TOPICS_KEY = 'enterprise.pinned_topics'
+
+/**
  * Preference key (scope `default`) holding the Little World (小世界) service URL.
  * Written by `applyEnterpriseConfig` from the config's top-level `world_url`
  * (empty string = not deployed); read by the state snapshot and the

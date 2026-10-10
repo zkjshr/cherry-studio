@@ -6,6 +6,8 @@ import { knowledgeErrorCodes } from '@shared/ipc/errors/knowledge'
 
 const { appGetMock } = vi.hoisted(() => ({ appGetMock: vi.fn() }))
 vi.mock('@application', () => ({ application: { get: appGetMock } }))
+// Mock the barrel (what the handler imports) so the feature graph behind it never loads.
+vi.mock('@main/features/knowledge', () => ({ listSharedKnowledgeBases: vi.fn() }))
 
 import { knowledgeHandlers } from '../knowledge'
 
@@ -186,5 +188,16 @@ describe('knowledgeHandlers', () => {
 
     expect(knowledgeService.listItemChunks).toHaveBeenCalledWith('base-1', 'i1')
     expect(result).toBe(chunks)
+  })
+
+  it('list_shared_kbs delegates to the shared kbs service', async () => {
+    const { listSharedKnowledgeBases } = await import('@main/features/knowledge')
+    const payload = { kbs: [{ id: '1', name: '101-结构所规范库', scope: 'dept' as const }], chatTopicId: null }
+    vi.mocked(listSharedKnowledgeBases).mockResolvedValue(payload)
+
+    const result = await knowledgeHandlers['knowledge.list_shared_kbs'](undefined, ctx)
+
+    expect(vi.mocked(listSharedKnowledgeBases)).toHaveBeenCalledWith()
+    expect(result).toEqual(payload)
   })
 })
