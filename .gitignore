@@ -107,3 +107,6 @@ world/data/
 world/frontend/dist/
 world/server/node_modules/
 world/frontend/node_modules/
+
+# SDD worktrees（隔离工作区，git-ignored）
+.worktrees/
