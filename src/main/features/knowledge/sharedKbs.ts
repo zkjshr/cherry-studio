@@ -52,7 +52,11 @@ export async function listSharedKnowledgeBases(): Promise<SharedKnowledgeBasesPa
   return { kbs, chatTopicId: findPinnedManagedTopicId() }
 }
 
-/** 第一个有置顶话题的受管助手的话题 id；无受管助手/无置顶话题时 null。 */
+/**
+ * 第一个有置顶话题的受管助手的话题 id；无受管助手/无置顶话题时 null。
+ * 注意：本分支尚无该 preference 行的写入方（applyEnterpriseConfig 的置顶话题
+ * 链路落地于后续改动），因此当前恒返回 null，详情页"去对话检索"按钮随之隐藏。
+ */
 function findPinnedManagedTopicId(): string | null {
   const managedIds = readUndeclaredPreferenceRow(ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY)
   const pinnedTopics = readUndeclaredPreferenceRow(ENTERPRISE_PINNED_TOPICS_KEY)

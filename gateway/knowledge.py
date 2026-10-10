@@ -25,7 +25,8 @@ async def client_kbs() -> dict:
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=60.0)) as client:
             kbs = await weknora.list_kbs(client)
-    except httpx.HTTPError:
+    except (httpx.HTTPError, ValueError):
+        # ValueError 覆盖 resp.json() 对非 JSON 响应体抛出的 JSONDecodeError。
         return {"kbs": []}
     return {
         "kbs": [

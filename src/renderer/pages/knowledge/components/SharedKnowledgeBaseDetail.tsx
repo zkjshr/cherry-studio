@@ -1,16 +1,18 @@
 import { useTranslation } from 'react-i18next'
 
 import { EmptyState } from '@cherrystudio/ui'
+import { useTabs } from '@renderer/hooks/tab'
 
 import { useKnowledgePage } from '../KnowledgePageProvider'
 
 /**
  * WeKnora 共享库（部门/公共）只读详情：库不可在客户端增删文档，说明文案 +
- * 可选"去对话检索"（跳企业置顶知识话题；无置顶话题时按钮隐藏）。
+ * 可选"去对话检索"（经工作台页签打开企业置顶知识话题；无置顶话题时按钮隐藏）。
  */
 const SharedKnowledgeBaseDetail = () => {
   const { t } = useTranslation()
   const { selectedSharedKb, chatTopicId } = useKnowledgePage()
+  const { openTab } = useTabs()
 
   if (!selectedSharedKb) {
     return null
@@ -29,7 +31,7 @@ const SharedKnowledgeBaseDetail = () => {
         {...(chatTopicId
           ? {
               actionLabel: t('knowledge.shared.open_chat'),
-              onAction: () => window.open(`/app/chat?topicId=${encodeURIComponent(chatTopicId)}`, '_self')
+              onAction: () => openTab(`/app/chat?topicId=${encodeURIComponent(chatTopicId)}`)
             }
           : {})}
       />

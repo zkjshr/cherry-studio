@@ -14,6 +14,9 @@ vi.mock('react-i18next', () => ({
   })
 }))
 
+const { openTab } = vi.hoisted(() => ({ openTab: vi.fn() }))
+vi.mock('@renderer/hooks/tab', () => ({ useTabs: () => ({ openTab }) }))
+
 const mockUseKnowledgePage = vi.mocked(useKnowledgePage)
 
 const createSharedKb = (overrides: Partial<SharedKnowledgeBase> = {}): SharedKnowledgeBase => ({
@@ -62,25 +65,23 @@ describe('SharedKnowledgeBaseDetail', () => {
     expect(screen.queryByText('knowledge.shared.open_chat')).not.toBeInTheDocument()
   })
 
-  it('navigates to the pinned topic chat on action', () => {
+  it('opens the pinned topic chat in a workspace tab on action', () => {
     mockSharedContext(createSharedKb(), 'topic-9')
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    vi.mocked(openTab).mockClear()
 
     render(<SharedKnowledgeBaseDetail />)
     fireEvent.click(screen.getByText('knowledge.shared.open_chat'))
 
-    expect(openSpy).toHaveBeenCalledWith('/app/chat?topicId=topic-9', '_self')
-    openSpy.mockRestore()
+    expect(openTab).toHaveBeenCalledWith('/app/chat?topicId=topic-9')
   })
 
   it('encodes the topic id in the navigation url', () => {
     mockSharedContext(createSharedKb(), 'topic 9/1')
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    vi.mocked(openTab).mockClear()
 
     render(<SharedKnowledgeBaseDetail />)
     fireEvent.click(screen.getByText('knowledge.shared.open_chat'))
 
-    expect(openSpy).toHaveBeenCalledWith('/app/chat?topicId=topic%209%2F1', '_self')
-    openSpy.mockRestore()
+    expect(openTab).toHaveBeenCalledWith('/app/chat?topicId=topic%209%2F1')
   })
 })

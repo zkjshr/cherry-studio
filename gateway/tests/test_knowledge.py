@@ -52,6 +52,16 @@ def test_kbs_weknora_unreachable_returns_empty():
     assert resp.json() == {"kbs": []}
 
 
+@respx.mock
+def test_kbs_malformed_upstream_json_returns_empty():
+    settings.weknora_base_url = "http://wk.test"
+    respx.get("http://wk.test/api/v1/knowledge-bases").mock(
+        return_value=httpx.Response(200, text="<html>"))
+    resp = client.get("/knowledge/api/kbs", headers=CLIENT)
+    assert resp.status_code == 200
+    assert resp.json() == {"kbs": []}
+
+
 def test_kbs_requires_client_token():
     assert client.get("/knowledge/api/kbs").status_code == 401
     assert client.get("/knowledge/api/kbs", headers={"X-Client-Token": "wrong"}).status_code == 401

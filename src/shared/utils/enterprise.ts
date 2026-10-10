@@ -22,10 +22,16 @@ export const ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY = 'enterprise.managed_assistan
 /**
  * Preference key (scope `default`) holding the enterprise pinned-topic mapping
  * (`assistantId -> { topicId }`) — the conversation the gateway ships with a
- * managed assistant, created and pinned by the enterprise config applier. Read
- * by the knowledge shared-KB service to resolve the detail page's「去对话检索」
- * jump target. Shared so the writer and the reader cannot drift on the row's
- * name or shape (same pattern as `ENTERPRISE_WORLD_URL_KEY`).
+ * managed assistant, to be created and pinned by the enterprise config applier.
+ *
+ * NOTE: this branch has NO writer for this row yet — the writer lives in the
+ * enterprise pinned-topic pipeline (applyEnterpriseConfig 的置顶话题链路，落地于
+ * 后续改动). Until that lands the row never exists, so the reader
+ * (`findPinnedManagedTopicId` in main's sharedKbs service) always returns null,
+ * `chatTopicId` stays null, and the shared-KB detail page hides its「去对话检索」
+ * action (forward-compatible degradation). The key is declared here so the
+ * future writer and the reader cannot drift on the row's name or shape (same
+ * pattern as `ENTERPRISE_WORLD_URL_KEY`).
  */
 export const ENTERPRISE_PINNED_TOPICS_KEY = 'enterprise.pinned_topics'
 
