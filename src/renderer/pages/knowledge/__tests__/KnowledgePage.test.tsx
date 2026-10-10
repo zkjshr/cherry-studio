@@ -26,6 +26,7 @@ function RoutedKnowledgePage() {
 
 const mockUseKnowledgeBases = vi.fn()
 const mockUseKnowledgeGroups = vi.fn()
+const mockUseSharedKnowledgeBases = vi.fn()
 const mockUseCreateKnowledgeGroup = vi.fn()
 const mockUseCreateKnowledgeBase = vi.fn()
 const mockUseRestoreKnowledgeBase = vi.fn()
@@ -76,6 +77,10 @@ vi.mock('../hooks/useKnowledgeGroups', () => ({
   useCreateKnowledgeGroup: () => mockUseCreateKnowledgeGroup(),
   useUpdateKnowledgeGroup: () => mockUseUpdateKnowledgeGroup(),
   useDeleteKnowledgeGroup: () => mockUseDeleteKnowledgeGroup()
+}))
+
+vi.mock('../hooks/useSharedKnowledgeBases', () => ({
+  useSharedKnowledgeBases: () => mockUseSharedKnowledgeBases()
 }))
 
 vi.mock('@renderer/components/Navbar', () => ({
@@ -673,6 +678,10 @@ describe('KnowledgePage', () => {
       isLoading: false,
       error: undefined,
       refetch: vi.fn()
+    })
+    mockUseSharedKnowledgeBases.mockReturnValue({
+      payload: { kbs: [], chatTopicId: null },
+      isLoading: false
     })
     mockUseUpdateKnowledgeBase.mockReturnValue({
       updateBase: vi.fn(),
