@@ -1,8 +1,9 @@
 import { useNavigate } from '@tanstack/react-router'
+import { Store } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@cherrystudio/ui'
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@cherrystudio/ui'
 import { ResourceCatalogView } from '@renderer/components/resourceCatalog/catalog'
 import { SettingsContentBody } from '@renderer/components/SettingsPrimitives'
 import { useSkillLauncher } from '@renderer/hooks/useSkillLauncher'
@@ -30,11 +31,22 @@ export function SkillsSettings() {
             filterResource={filterResource}
             allowColumnToggle
             toolbarFooter={
-              <TabsList className="shrink-0" aria-label={t('settings.skills.title')}>
-                <TabsTrigger value="all">{t('common.all')}</TabsTrigger>
-                <TabsTrigger value="system">{t('settings.skills.tabs.system')}</TabsTrigger>
-                <TabsTrigger value="builtin">{t('settings.skills.tabs.builtin')}</TabsTrigger>
-              </TabsList>
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <TabsList className="shrink-0" aria-label={t('settings.skills.title')}>
+                  <TabsTrigger value="all">{t('common.all')}</TabsTrigger>
+                  <TabsTrigger value="system">{t('settings.skills.tabs.system')}</TabsTrigger>
+                  <TabsTrigger value="builtin">{t('settings.skills.tabs.builtin')}</TabsTrigger>
+                </TabsList>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="ml-auto shrink-0 gap-1.5"
+                  data-ui="settings.skills.browse-market"
+                  onClick={() => void navigate({ to: '/app/market' })}>
+                  <Store size={13} />
+                  {t('settings.skills.browseMarket')}
+                </Button>
+              </div>
             }
           />
         </TabsContent>

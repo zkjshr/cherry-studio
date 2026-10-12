@@ -30,6 +30,7 @@ const resultsFixture: SkillSearchResult[] = [
     downloads: 0,
     sourceRegistry: 'claude-plugins.dev',
     sourceUrl: 'https://github.com/anthropic/skills/tree/main/code-review',
+    iconUrl: null,
     installSource: 'claude-plugins:anthropic/skills/code-review'
   },
   {
@@ -41,6 +42,7 @@ const resultsFixture: SkillSearchResult[] = [
     downloads: 12,
     sourceRegistry: 'skills.sh',
     sourceUrl: 'https://github.com/vercel/skills',
+    iconUrl: null,
     installSource: 'skills.sh:vercel/skills/react-skill'
   }
 ]
@@ -230,6 +232,7 @@ describe('SkillMarketplaceDialog', () => {
       'skills.sh1',
       'claude-plugins.dev2',
       'clawhub.ai',
+      'SkillHub',
       'GitHub'
     ])
     expect(sourceSelect()).toHaveValue('skills.sh')

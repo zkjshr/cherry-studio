@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>小世界 · 虚拟设计院</title>
+    <title>小世界 · 海岛</title>
   </head>
   <body>
     <div id="loading">
@@ -11,26 +11,47 @@
       <div id="loading-text">正在进入小世界…</div>
     </div>
 
-    <div id="hint" hidden>WASD / 方向键 移动 · Enter 聊天 · Esc 结束输入</div>
+    <div id="hint" hidden>WASD / 点击地面 移动 · 1/2/3 动作 · Enter 聊天 · Esc 结束输入</div>
+
+    <canvas id="minimap" hidden title="点击地图传送"></canvas>
+
+    <div id="toast" hidden></div>
 
     <div id="chat-panel" hidden>
-      <div class="chat-head">消息 · 全体频道</div>
+      <div class="chat-head">消息 · 频道</div>
       <div id="chat-list"></div>
     </div>
 
     <div id="chat-bar" hidden>
+      <div id="emote-bar">
+        <button type="button" data-emoji="😀">😀</button>
+        <button type="button" data-emoji="😂">😂</button>
+        <button type="button" data-emoji="👍">👍</button>
+        <button type="button" data-emoji="🎉">🎉</button>
+        <button type="button" data-emoji="❤️">❤️</button>
+        <button type="button" data-emoji="👏">👏</button>
+      </div>
       <div id="chat-scope">
         <button type="button" data-scope="near" class="on">附近</button>
         <button type="button" data-scope="all">全体</button>
+        <button type="button" data-scope="room" disabled title="进入小房子后可用">房间</button>
       </div>
       <input id="chat-input" maxlength="120" placeholder="和身边的同事聊聊…（Enter 发送）" autocomplete="off" />
+    </div>
+
+    <div id="panel-modal" hidden>
+      <div class="pm-card">
+        <div class="pm-title" id="pm-title"></div>
+        <div class="pm-body" id="pm-body"></div>
+        <button id="pm-close" type="button">知道了</button>
+      </div>
     </div>
 
     <div id="profile-root"></div>
 
     <div id="roomfull" hidden>
       <div class="rf-card">
-        <div class="rf-title">园区满员啦</div>
+        <div class="rf-title">小世界满员啦</div>
         <p>当前同时在线已达 50 人上限，<br />请稍后再来看看大家。</p>
         <button id="rf-retry" type="button">稍后再试</button>
       </div>

@@ -26,6 +26,28 @@ def extract_ollama_delta(line: str) -> str | None:
     return (d.get("message") or {}).get("content") or None
 
 
+def extract_ollama_parts(line: str) -> dict | None:
+    """ollama NDJSON 行 → 正文/思考分段（模型代理用）。
+
+    思考模型（think=true）的推理过程在 message.thinking，正文在 message.content；
+    各键仅在存在且非空时携带，done 行与非 JSON 行返回 None。客户端按 OpenAI
+    惯例把 thinking 映射为 delta.reasoning_content（AI SDK 原生解析为 reasoning 流块）。
+    """
+    try:
+        d = json.loads(line)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if d.get("done"):
+        return None
+    message = d.get("message") or {}
+    parts: dict = {}
+    if message.get("thinking"):
+        parts["thinking"] = message["thinking"]
+    if message.get("content"):
+        parts["content"] = message["content"]
+    return parts or None
+
+
 def parse_sse_chunk(buf: str) -> list[tuple[str, str]]:
     """把一段 SSE 文本解析为 (event, data-json字符串) 列表。"""
     out: list[tuple[str, str]] = []

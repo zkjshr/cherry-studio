@@ -45,6 +45,7 @@ import * as path from 'node:path'
 import { net } from 'electron'
 
 import { application } from '@application'
+import { notifyDataApiDataChange } from '@data/dataApiDataChange'
 import { assistantDataService } from '@data/services/AssistantService'
 import { mcpServerService } from '@data/services/McpServerService'
 import { miniAppService } from '@data/services/MiniAppService'
@@ -584,6 +585,16 @@ export async function installPlugin(pluginId: string): Promise<MarketInstallResu
       throw new Error(firstError ? `install failed: ${firstError}` : 'install failed')
     }
 
+    // Skill components bypass DataApi writes — without this signal every open
+    // skill list (market strip, settings) keeps yesterday's library.
+    if (
+      results.some(
+        (result) => result.kind === 'skill' && (result.status === 'installed' || result.status === 'updated')
+      )
+    ) {
+      notifyDataApiDataChange([{ endpoint: '/skills', kind: 'membership' }])
+    }
+
     logger.info('Marketplace plugin install finished', {
       pluginId,
       version: manifest.version,
@@ -729,6 +740,11 @@ export async function uninstallPlugin(pluginId: string): Promise<MarketUninstall
     }
 
     const ok = !anyFailed
+    // Mirror of the install-side signal: removed skill components must leave
+    // every open skill list the moment the uninstall commits.
+    if (results.some((result) => result.kind === 'skill' && result.status === 'removed')) {
+      notifyDataApiDataChange([{ endpoint: '/skills', kind: 'membership' }])
+    }
     logger.info('Marketplace plugin uninstall finished', {
       pluginId,
       ok,

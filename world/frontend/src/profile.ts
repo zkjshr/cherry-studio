@@ -1,9 +1,9 @@
-// 首次身份填写（PRD D4 单点登录前的过渡方案）：
-// 昵称 1-20 字 + 部门下拉（PRD §4 九选项）→ POST /api/profile → 服务端按 cid 持久化。
+// 首次身份填写（v2 §4：昵称 + 部门 + 外观配色；企微扫码登录前的过渡方案）：
+// → POST /api/profile → 服务端按 cid 持久化。
 
-import { DEPT_LIST } from './campus'
+import { DEPT_LIST, PALETTE, hex } from './island'
 
-export function showProfileModal(submit: (nickname: string, dept: string) => Promise<void>): void {
+export function showProfileModal(submit: (nickname: string, dept: string, color: number) => Promise<void>): void {
   const root = document.getElementById('profile-root')
   if (!root) return
   root.innerHTML = ''
@@ -21,6 +21,10 @@ export function showProfileModal(submit: (nickname: string, dept: string) => Pro
         <option value="" disabled selected>请选择部门</option>
         ${DEPT_LIST.map((d) => `<option value="${d}">${d}</option>`).join('')}
       </select>
+      <label>化身颜色</label>
+      <div class="pf-colors" id="pf-colors">
+        ${PALETTE.map((c, i) => `<button type="button" data-i="${i}" style="background:${hex(c)}" class="${i === 1 ? 'on' : ''}" aria-label="颜色${i + 1}"></button>`).join('')}
+      </div>
       <div class="pf-err" id="pf-err"></div>
       <button id="pf-go" type="button">进入小世界</button>
     </div>
@@ -31,6 +35,15 @@ export function showProfileModal(submit: (nickname: string, dept: string) => Pro
   const dept = overlay.querySelector('#pf-dept') as HTMLSelectElement
   const err = overlay.querySelector('#pf-err') as HTMLElement
   const go = overlay.querySelector('#pf-go') as HTMLButtonElement
+  let color = 1
+
+  const swatches = overlay.querySelectorAll<HTMLButtonElement>('#pf-colors button')
+  for (const sw of swatches) {
+    sw.addEventListener('click', () => {
+      color = Number(sw.dataset.i)
+      for (const s of swatches) s.classList.toggle('on', s === sw)
+    })
+  }
 
   const fail = (msg: string) => {
     err.textContent = msg
@@ -53,7 +66,7 @@ export function showProfileModal(submit: (nickname: string, dept: string) => Pro
     go.disabled = true
     go.textContent = '提交中…'
     try {
-      await submit(name, dept.value)
+      await submit(name, dept.value, color)
       root.innerHTML = ''
     } catch {
       fail('提交失败，请稍后重试')

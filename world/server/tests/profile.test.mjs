@@ -20,11 +20,11 @@ test('合法档案 → 200 且按 cid 持久化（可更新）', async (t) => {
   const res = await post(srv.base, { cid: 'u001', nickname: '张三丰', dept: '建筑' })
   assert.equal(res.status, 200)
   assert.deepEqual(await res.json(), { ok: true })
-  assert.deepEqual(srv.app.store.getProfile('u001'), { nickname: '张三丰', dept: '建筑' })
+  assert.deepEqual(srv.app.store.getProfile('u001'), { nickname: '张三丰', dept: '建筑', color: null })
 
   // 再次提交覆盖
-  await post(srv.base, { cid: 'u001', nickname: '张工', dept: '结构' })
-  assert.deepEqual(srv.app.store.getProfile('u001'), { nickname: '张工', dept: '结构' })
+  await post(srv.base, { cid: 'u001', nickname: '张工', dept: '结构', color: 5 })
+  assert.deepEqual(srv.app.store.getProfile('u001'), { nickname: '张工', dept: '结构', color: 5 })
 
   // 每个部门枚举值都合法
   for (const dept of DEPTS) {

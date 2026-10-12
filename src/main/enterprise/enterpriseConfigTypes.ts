@@ -35,6 +35,17 @@ export interface EnterpriseDefaultModelsConfig {
   quick_model?: string
 }
 
+/**
+ * Pinned conversation pushed with a managed assistant: the gateway asks the
+ * client to keep one pinned topic under the assistant (e.g. 问问百事通).
+ */
+export interface EnterprisePinnedTopicConfig {
+  /** Topic display name (also the conversation title). */
+  name: string
+  /** Optional first assistant message shown when the topic opens. */
+  welcome?: string
+}
+
 export interface EnterpriseAssistantConfig {
   name: string
   prompt?: string
@@ -47,6 +58,8 @@ export interface EnterpriseAssistantConfig {
   mcp_server_ids?: string[]
   /** E1 applies only; the no-edit guard for managed assistants lands in E2. */
   managed?: boolean
+  /** Create/keep a pinned topic under this assistant when present. */
+  pinned_topic?: EnterprisePinnedTopicConfig
 }
 
 export interface EnterpriseMcpServerConfig {
@@ -101,6 +114,25 @@ function asOptionalObject(value: unknown, label: string): Record<string, unknown
   const record = asRecord(value)
   if (!record) throw new Error(`${label} must be an object`)
   return record
+}
+
+/**
+ * Pinned-topic push: `{ name, welcome? }`. `null`/absent clears the push;
+ * a non-empty shape with a valid non-empty `name` (and optional string
+ * `welcome`) passes — anything else fails validation like the gateway's
+ * own `_validate_pinned_topic`, so the two sides reject the same mistakes.
+ */
+function asOptionalPinnedTopic(value: unknown, label: string): EnterprisePinnedTopicConfig | undefined {
+  if (value === undefined || value === null) return undefined
+  const record = asRecord(value)
+  if (!record || typeof record.name !== 'string' || !record.name.trim()) {
+    throw new Error(`${label} must be an object with a non-empty string name`)
+  }
+  const welcome = record.welcome
+  if (welcome !== undefined && typeof welcome !== 'string') {
+    throw new Error(`${label}.welcome must be a string`)
+  }
+  return { name: record.name, ...(typeof welcome === 'string' ? { welcome } : {}) }
 }
 
 /**
@@ -198,6 +230,7 @@ export function validateEnterpriseConfigPayload(payload: unknown): EnterpriseCli
     }
     const settings = asOptionalObject(item.settings, `assistants[${index}].settings`)
     const mcpServerIds = asStringArray(item.mcp_server_ids)
+    const pinnedTopic = asOptionalPinnedTopic(item.pinned_topic, `assistants[${index}].pinned_topic`)
     return {
       name: item.name,
       ...(typeof item.prompt === 'string' ? { prompt: item.prompt } : {}),
@@ -206,7 +239,8 @@ export function validateEnterpriseConfigPayload(payload: unknown): EnterpriseCli
       ...(typeof item.model === 'string' ? { model: item.model } : {}),
       ...(settings ? { settings } : {}),
       ...(mcpServerIds ? { mcp_server_ids: mcpServerIds } : {}),
-      ...(typeof item.managed === 'boolean' ? { managed: item.managed } : {})
+      ...(typeof item.managed === 'boolean' ? { managed: item.managed } : {}),
+      ...(pinnedTopic ? { pinned_topic: pinnedTopic } : {})
     } satisfies EnterpriseAssistantConfig
   })
 

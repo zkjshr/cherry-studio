@@ -59,6 +59,8 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('@application', () => ({
   application: {
+    // notifyDataApiDataChange gates on this; false keeps the broadcast a no-op in tests.
+    isReady: vi.fn(() => false),
     getPath: vi.fn((key: string) => {
       if (key === 'app.userdata.data') return mocks.dirs.userData
       if (key === 'app.temp') return mocks.dirs.temp

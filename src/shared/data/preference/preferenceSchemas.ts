@@ -602,7 +602,7 @@ export const DefaultPreferences: PreferenceSchemas = {
     'agent.icon_type': 'emoji',
     'agent.input.toolbar.pinned_tools': ['composer:new-session', 'skills', 'permission-mode'],
     'agent.language': null,
-    'agent.session.display_mode': 'agent',
+    'agent.session.display_mode': 'workdir',
     'agent.session.position': 'left',
     'app.browser.agent_control.enabled': true,
     'app.browser.open_links_in_browser': true,

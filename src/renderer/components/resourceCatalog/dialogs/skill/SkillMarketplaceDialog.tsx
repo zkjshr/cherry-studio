@@ -35,6 +35,7 @@ const SOURCE_LABELS: Record<SkillSearchSource, string> = {
   'skills.sh': 'skills.sh',
   'claude-plugins.dev': 'claude-plugins.dev',
   'clawhub.ai': 'clawhub.ai',
+  'skillhub.cn': 'SkillHub',
   github: 'GitHub'
 }
 const SEARCH_SOURCES = Object.keys(SOURCE_LABELS) as SkillSearchSource[]

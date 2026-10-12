@@ -1,28 +1,43 @@
-// WS 会话层 —— 对齐 PRD §4 锁死契约（详见 world/shared-contract.md）。
-// 客户端 → {join} {pos} {chat}；服务端 → {init} {players} {chat} {leave}。
+// WS 会话层 —— v2 契约（详见 world/shared-contract.md）。
+// 客户端 → {join} {pos} {chat} {house} {emote}；服务端 → {init} {players} {chat} {emote} {house_ok} {house_full} {leave}。
 // 断线自动重连；关闭码 4000（room_full）不重连，交由 UI 出满员提示。
 
 export interface PlayerState {
   cid: string
-  nickname: string
-  dept: string
+  name: string
+  dept: string | null
+  color: number | null
+  houseId: string | null
   x: number
   z: number
   ry: number
-  anim: 'idle' | 'walk'
-  /** true=在场景走动；false=在线但不在场景（前端渲染为坐在部门工位） */
-  scene: boolean
+  anim: 'idle' | 'walk' | 'wave' | 'clap' | 'dance'
 }
 
+export type ChatScope = 'near' | 'all' | 'room'
+
 export interface ChatMsg {
-  from: string
-  scope: 'near' | 'all'
+  from: { cid: string; name: string }
+  scope: ChatScope
   text: string
+}
+
+export interface EmoteMsg {
+  from: { cid: string; name: string }
+  emoji: string
 }
 
 export interface InitMsg {
   type: 'init'
-  self: { cid: string; nickname: string; dept: string; x?: number; z?: number }
+  self: {
+    cid: string
+    nickname: string
+    dept: string | null
+    color: number | null
+    houseId: string | null
+    x?: number
+    z?: number
+  }
   players: PlayerState[]
   world?: Record<string, unknown>
 }
@@ -33,6 +48,9 @@ export interface NetHandlers {
   onInit(init: InitMsg): void
   onPlayers(players: PlayerState[]): void
   onChat(msg: ChatMsg): void
+  onEmote(msg: EmoteMsg): void
+  onHouseOk(id: string | null): void
+  onHouseFull(id: string): void
   onLeave(cid: string): void
   onStatus(status: NetStatus, detail?: string): void
 }
@@ -53,7 +71,7 @@ export class WorldNet {
     this.closedByUs = false
     clearTimeout(this.retryTimer)
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const url = `${proto}//${location.host}/ws?cid=${encodeURIComponent(cid)}&token=${encodeURIComponent(token)}`
+    const url = `${proto}://${location.host}/ws?cid=${encodeURIComponent(cid)}&token=${encodeURIComponent(token)}`
     this.h.onStatus(this.everOpened ? 'reconnecting' : 'connecting')
     const ws = new WebSocket(url)
     this.ws = ws
@@ -76,7 +94,7 @@ export class WorldNet {
         case 'init':
           this.h.onInit({
             type: 'init',
-            self: m.self ?? { cid: '', nickname: '', dept: '' },
+            self: m.self ?? { cid: '', nickname: '', dept: null, color: null, houseId: null },
             players: Array.isArray(m.players) ? m.players : [],
             world: m.world
           })
@@ -86,7 +104,21 @@ export class WorldNet {
           break
         case 'chat':
           if (typeof m.text === 'string')
-            this.h.onChat({ from: String(m.from ?? ''), scope: m.scope === 'all' ? 'all' : 'near', text: m.text })
+            this.h.onChat({
+              from: m.from ?? { cid: '', name: '' },
+              scope: m.scope === 'all' || m.scope === 'room' ? m.scope : 'near',
+              text: m.text
+            })
+          break
+        case 'emote':
+          if (typeof m.emoji === 'string')
+            this.h.onEmote({ from: m.from ?? { cid: '', name: '' }, emoji: m.emoji })
+          break
+        case 'house_ok':
+          this.h.onHouseOk(typeof m.id === 'string' ? m.id : null)
+          break
+        case 'house_full':
+          if (typeof m.id === 'string') this.h.onHouseFull(m.id)
           break
         case 'leave':
           if (typeof m.cid === 'string') this.h.onLeave(m.cid)
@@ -117,12 +149,20 @@ export class WorldNet {
     this.connect(cid, token)
   }
 
-  sendPos(x: number, z: number, ry: number, anim: 'idle' | 'walk'): void {
+  sendPos(x: number, z: number, ry: number, anim: 'idle' | 'walk' | 'wave' | 'clap' | 'dance'): void {
     this.sendRaw({ type: 'pos', x: round3(x), z: round3(z), ry: round3(ry), anim })
   }
 
-  sendChat(text: string, scope: 'near' | 'all'): void {
+  sendChat(text: string, scope: ChatScope): void {
     this.sendRaw({ type: 'chat', scope, text })
+  }
+
+  sendHouse(id: string | null): void {
+    this.sendRaw({ type: 'house', id })
+  }
+
+  sendEmote(emoji: string): void {
+    this.sendRaw({ type: 'emote', emoji })
   }
 
   close(): void {

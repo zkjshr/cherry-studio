@@ -16,7 +16,7 @@ export const BROADCAST_INTERVAL_MS = 100
 /** 心跳有效窗口：90s 无心跳视为离线（D8 / PRD §4） */
 export const HEARTBEAT_WINDOW_MS = 90_000
 
-/** 附近聊天半径（米，PRD §5） */
+/** 附近聊天半径（米，v2 §5） */
 export const NEAR_RADIUS = 8
 
 /** 单条聊天文本长度上限 */
@@ -25,8 +25,20 @@ export const MAX_CHAT_LEN = 500
 /** 昵称长度区间（1-20） */
 export const NICKNAME_MAX_LEN = 20
 
-/** 出生点（init.world.spawn） */
-export const SPAWN = { x: 0, z: 0 }
+/** 出生点（init.world.spawn）：中央广场南侧，第一眼看到广场三馆与海平线 */
+export const SPAWN = { x: 0, z: 26 }
+
+/** 小房子 id 枚举（前端 island.ts 的 HOUSES 一一对应；v2 §3） */
+export const HOUSE_IDS = ['h1', 'h2', 'h3', 'h4']
+
+/** 每间小房子容量（v2 §3：≤6 人/间） */
+export const HOUSE_CAPACITY = 6
+
+/** 表情字符长度上限（UTF-16 码元） */
+export const MAX_EMOTE_LEN = 8
+
+/** 外观配色档位数量（0..PALETTE_SIZE-1；前端 island.ts PALETTE 一一对应） */
+export const PALETTE_SIZE = 8
 
 export function loadConfig(env = process.env) {
   return {

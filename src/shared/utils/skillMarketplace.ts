@@ -1,6 +1,9 @@
 import {
   ClaudePluginsSearchResponseSchema,
   ClawhubSearchResponseSchema,
+  SkillhubSearchResponseSchema,
+  SkillhubShowcaseResponseSchema,
+  type SkillhubSkillItem,
   type SkillSearchResult,
   type SkillSearchSource,
   SkillsShSearchResponseSchema
@@ -88,6 +91,7 @@ export function normalizeClaudePlugins(raw: unknown): SkillSearchResult[] {
       downloads: s.installs ?? 0,
       sourceRegistry: 'claude-plugins.dev' as SkillSearchSource,
       sourceUrl: s.sourceUrl ?? `https://github.com/${repoOwner}/${repoName}/tree/main/${directoryPath}`,
+      iconUrl: null,
       // The install identifier is owner/repo/directoryPath — the REAL directory, not the display name.
       installSource: `claude-plugins:${repoOwner}/${repoName}/${directoryPath}`
     }
@@ -206,6 +210,7 @@ export function buildGithubSkillResult(rawUrl: string): SkillSearchResult | null
     downloads: 0,
     sourceRegistry: 'github',
     sourceUrl: canonicalUrl,
+    iconUrl: null,
     installSource: `github:${canonicalUrl}`
   }
 }
@@ -264,6 +269,23 @@ export function parseSkillSourceUrl(sourceUrl: string): ParsedSkillSourceUrl | n
     return { sourceRegistry: 'clawhub.ai', installSource: `clawhub:${owner}/${slug}` }
   }
 
+  // skillhub.cn canonical skill page: skillhub.cn/skills/{handle}/{slug} — the api.skillhub.cn
+  // host only serves API verbs (405 on a browser GET), so it must never be the stored URL.
+  if (host === 'skillhub.cn') {
+    const [skillsSegment, handle, slug, ...extraParts] = pathParts
+    if (
+      extraParts.length > 0 ||
+      skillsSegment !== 'skills' ||
+      !handle ||
+      !slug ||
+      !GITHUB_REPO_PART.test(handle) ||
+      !GITHUB_REPO_PART.test(slug)
+    ) {
+      return null
+    }
+    return { sourceRegistry: 'skillhub.cn', installSource: `skillhub:${handle}/${slug}` }
+  }
+
   if (host === 'github.com') {
     const [owner, repo, treeSegment, branch, ...directoryParts] = pathParts
     if (
@@ -317,6 +339,7 @@ export function normalizeSkillsSh(raw: unknown): SkillSearchResult[] {
     downloads: skill.installs,
     sourceRegistry: 'skills.sh',
     sourceUrl: `https://skills.sh/${skill.id}`,
+    iconUrl: null,
     installSource: `skills.sh:${skill.id}`
   }))
 }
@@ -337,8 +360,56 @@ export function normalizeClawhub(raw: unknown): SkillSearchResult[] {
       downloads: 0,
       sourceRegistry: 'clawhub.ai' as const,
       sourceUrl: `https://clawhub.ai/${skill.ownerHandle}/skills/${skill.slug}`,
+      iconUrl: null,
       installSource: `clawhub:${skill.ownerHandle}/${skill.slug}`
     }
+  })
+}
+
+export function normalizeSkillhub(raw: unknown): SkillSearchResult[] {
+  const parsed = SkillhubSearchResponseSchema.safeParse(raw)
+  if (!parsed.success) throw new Error('Invalid skillhub.cn search response')
+
+  return normalizeSkillhubItems(parsed.data.results)
+}
+
+/** Validate a skillhub.cn showcase (`/api/v1/showcase/*`) payload and normalize its skills. */
+export function normalizeSkillhubShowcase(raw: unknown): SkillSearchResult[] {
+  const parsed = SkillhubShowcaseResponseSchema.safeParse(raw)
+  if (!parsed.success) throw new Error('Invalid skillhub.cn showcase response')
+
+  return normalizeSkillhubItems(parsed.data.skills)
+}
+
+/**
+ * skillhub.cn items share one shape across the search and showcase endpoints.
+ * Items without a namespace handle are dropped: the install handle is
+ * `skillhub:{handle}/{slug}`, and the download API needs the namespace to resolve
+ * the same skill the user saw. The source URL is the human-browsable site page
+ * (`skillhub.cn/skills/{handle}/{slug}`) so the source chip opens the real
+ * detail view and `parseSkillSourceUrl` can recover the install handle for updates.
+ */
+export function normalizeSkillhubItems(items: SkillhubSkillItem[]): SkillSearchResult[] {
+  return items.flatMap((item) => {
+    const namespace = item.namespace
+    const handle = namespace?.handle
+    if (!handle) return []
+    const slug = namespace.publicSlug || item.slug
+    const displayName = item.displayName || item.name
+    return [
+      {
+        slug,
+        name: displayName,
+        description: item.description_zh || item.description || item.summary || null,
+        author: item.owner_name || item.author || handle,
+        stars: item.stars ?? 0,
+        downloads: item.downloads ?? item.installs ?? 0,
+        sourceRegistry: 'skillhub.cn' as const,
+        sourceUrl: `https://skillhub.cn/skills/${handle}/${slug}`,
+        iconUrl: item.iconUrl || item.icon_url || null,
+        installSource: `skillhub:${handle}/${slug}`
+      }
+    ]
   })
 }
 
@@ -370,6 +441,16 @@ const MARKETPLACE_SOURCES: readonly MarketplaceSource[] = [
       return url.toString()
     },
     normalize: normalizeClawhub
+  },
+  {
+    name: 'skillhub.cn',
+    buildUrl: (query) => {
+      const url = new URL('https://api.skillhub.cn/api/v1/search')
+      url.searchParams.set('q', query)
+      url.searchParams.set('page_size', '20')
+      return url.toString()
+    },
+    normalize: normalizeSkillhub
   }
 ]
 

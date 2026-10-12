@@ -1,11 +1,14 @@
-// 聊天 UI（PRD §5 / 任务 W1b）：
-//  - near 消息 → 头顶气泡（仅与自己的距离 ≤ NEAR_M 时显示，超出自动隐藏）
-//  - all  消息 → 右侧「全体频道」列表
-//  - Enter 聚焦输入框、Enter 发送、Esc 失焦；范围可切换（附近/全体）
+// 聊天 UI（v2 §5）：三通道 ——
+//  - near  消息 → 头顶气泡（仅与自己的距离 ≤ NEAR_M 时显示，超出自动隐藏）
+//  - all   消息 → 右侧频道列表
+//  - room  消息 → 右侧频道列表（[房间] 标签；进小房子后可用）
+//  - Enter 聚焦输入框、Enter 发送、Esc 失焦；范围可切换（附近/全体/房间）
 
 import * as THREE from 'three'
 
 export const NEAR_M = 8
+
+export type ChatScopeUI = 'near' | 'all' | 'room'
 
 const BUBBLE_LIFE = 6.5 // 气泡停留秒数
 const MAX_LINES = 4
@@ -19,13 +22,14 @@ interface Bubble {
 }
 
 export class ChatUI {
-  onSend: ((text: string, scope: 'near' | 'all') => void) | null = null
+  onSend: ((text: string, scope: ChatScopeUI) => void) | null = null
 
   private readonly panel: HTMLElement
   private readonly bar: HTMLElement
   private readonly list: HTMLElement
   private readonly input: HTMLInputElement
-  private scope: 'near' | 'all' = 'near'
+  private scope: ChatScopeUI = 'near'
+  private roomAvailable = false
   private readonly bubbles = new Map<THREE.Object3D, Bubble>()
   private readonly bubbleGroup = new THREE.Group()
 
@@ -51,10 +55,10 @@ export class ChatUI {
 
     for (const btn of Array.from(byId('chat-scope').querySelectorAll('button'))) {
       btn.addEventListener('click', () => {
-        this.scope = (btn as HTMLElement).dataset.scope === 'all' ? 'all' : 'near'
-        for (const b of Array.from(byId('chat-scope').querySelectorAll('button'))) b.classList.toggle('on', b === btn)
-        this.input.placeholder =
-          this.scope === 'near' ? '和身边的同事聊聊…（Enter 发送）' : '对全院广播一句话…（Enter 发送）'
+        const s = (btn as HTMLElement).dataset.scope as ChatScopeUI
+        if (s === 'room' && !this.roomAvailable) return
+        this.scope = s
+        this.refreshScopeButtons()
         this.focusInput()
       })
     }
@@ -78,8 +82,31 @@ export class ChatUI {
     this.input.focus()
   }
 
-  /** 全体频道消息进侧栏 */
-  addListMessage(name: string, dept: string, text: string, mine: boolean): void {
+  /** 进/出小房子后更新「房间」通道可用性 */
+  setRoomAvailable(v: boolean): void {
+    this.roomAvailable = v
+    const roomBtn = byId('chat-scope').querySelector('button[data-scope="room"]') as HTMLButtonElement | null
+    if (roomBtn) roomBtn.disabled = !v
+    if (!v && this.scope === 'room') {
+      this.scope = 'near'
+      this.refreshScopeButtons()
+    }
+  }
+
+  private refreshScopeButtons(): void {
+    for (const b of Array.from(byId('chat-scope').querySelectorAll('button'))) {
+      b.classList.toggle('on', (b as HTMLElement).dataset.scope === this.scope)
+    }
+    this.input.placeholder =
+      this.scope === 'near'
+        ? '和身边的同事聊聊…（Enter 发送）'
+        : this.scope === 'room'
+          ? '和屋里的人说点悄悄话…（Enter 发送）'
+          : '对全岛广播一句话…（Enter 发送）'
+  }
+
+  /** 频道列表消息（all/room；tag 显示来源） */
+  addListMessage(name: string, dept: string, text: string, mine: boolean, tag = ''): void {
     const empty = this.list.querySelector('.empty')
     if (empty) empty.remove()
     const row = document.createElement('div')
@@ -92,6 +119,12 @@ export class ChatUI {
       d.className = 'dept'
       d.textContent = dept
       who.appendChild(d)
+    }
+    if (tag) {
+      const t = document.createElement('span')
+      t.className = 'tag'
+      t.textContent = tag
+      who.appendChild(t)
     }
     const txt = document.createElement('span')
     txt.textContent = text

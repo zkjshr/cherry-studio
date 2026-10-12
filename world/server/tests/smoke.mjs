@@ -11,8 +11,8 @@ const step = (name, fn) => steps.push({ name, fn })
 step('ws join → init（self/players/world.spawn）', async ({ srv }) => {
   const { ws, init } = await joinPlayer(srv.wsBase, 'smoke-1')
   assert.equal(init.self.cid, 'smoke-1')
-  assert.equal(init.self.scene, true)
-  assert.deepEqual(init.world.spawn, { x: 0, z: 0 })
+  assert.equal(init.self.houseId, null)
+  assert.deepEqual(init.world.spawn, { x: 0, z: 26 })
   return { ws }
 })
 
@@ -24,7 +24,7 @@ step('第二位玩家加入并互见（players 全量广播）', async ({ srv, s
   const other = players.players.find((p) => p.cid === 'smoke-2')
   assert.ok(other, 'players 应含 smoke-2')
   assert.equal(other.x, 3)
-  assert.equal(other.scene, true)
+  assert.equal(other.houseId, null)
 })
 
 step('chat scope=all 转发', async ({ state }) => {
@@ -50,14 +50,14 @@ step('POST /api/profile → 200', async ({ srv }) => {
     body: JSON.stringify({ cid: 'smoke-hb', nickname: '冒烟工', dept: '机电' })
   })
   assert.equal(res.status, 200)
-  assert.deepEqual(srv.app.store.getProfile('smoke-hb'), { nickname: '冒烟工', dept: '机电' })
+  assert.deepEqual(srv.app.store.getProfile('smoke-hb'), { nickname: '冒烟工', dept: '机电', color: null })
 })
 
-step('GET /api/health → ok / online / inScene', async ({ srv }) => {
+step('GET /api/health → ok / online（场景内）/ clients（心跳）', async ({ srv }) => {
   const health = await (await fetch(`${srv.base}/api/health`)).json()
   assert.equal(health.ok, true)
-  assert.ok(health.online >= 3, `online=${health.online}`)
-  assert.equal(health.inScene, 2)
+  assert.equal(health.online, 2)
+  assert.ok(health.clients >= 1, `clients=${health.clients}`)
 })
 
 step('GET / → 静态托管（占位页）', async ({ srv }) => {

@@ -146,6 +146,46 @@ def test_openai_flattens_array_text_content(_isolated_db):
 
 
 @respx.mock
+def test_ollama_stream_passes_thinking_as_reasoning_content(_isolated_db):
+    """思考过程（message.thinking）映射为 delta.reasoning_content 流块，且请求显式 think=true。"""
+    _put_upstream("oll", protocol="ollama", base_url="http://o.test", api_key="",
+                  models=[{"id": "qwen"}])
+    ndjson = (
+        '{"message":{"thinking":"先分析题意"},"done":false}\n'
+        '{"message":{"thinking":"再列算式"},"done":false}\n'
+        '{"message":{"content":"2"},"done":false}\n'
+        '{"message":{"content":""},"done":true,"prompt_eval_count":3,"eval_count":5}\n'
+    )
+    mocked = respx.post("http://o.test/api/chat").mock(return_value=httpx.Response(
+        200, content=ndjson.encode(), headers={"content-type": "application/x-ndjson"}))
+    resp = client.post("/v1/chat/completions", headers=AUTH,
+                       json={"model": "oll/qwen", "stream": True, "messages": [{"role": "user", "content": "1+1"}]})
+    assert resp.status_code == 200
+    events = [ln[6:] for ln in resp.text.splitlines() if ln.startswith("data: ")]
+    chunks = [json.loads(e) for e in events[:-1]]
+    deltas = [c["choices"][0]["delta"] for c in chunks]
+    assert "".join(d.get("reasoning_content") or "" for d in deltas) == "先分析题意再列算式"
+    assert "".join(d.get("content") or "" for d in deltas) == "2"
+    sent = json.loads(mocked.calls.last.request.content)
+    assert sent["think"] is True
+
+
+@respx.mock
+def test_ollama_non_stream_includes_reasoning_content(_isolated_db):
+    _put_upstream("oll", protocol="ollama", base_url="http://o.test", api_key="",
+                  models=[{"id": "qwen"}])
+    respx.post("http://o.test/api/chat").mock(return_value=httpx.Response(200, json={
+        "model": "qwen", "done": True,
+        "message": {"role": "assistant", "content": "2", "thinking": "简单加法"},
+        "prompt_eval_count": 3, "eval_count": 5}))
+    resp = _chat("oll/qwen")
+    assert resp.status_code == 200
+    message = resp.json()["choices"][0]["message"]
+    assert message["reasoning_content"] == "简单加法"
+    assert message["content"] == "2"
+
+
+@respx.mock
 def test_ollama_non_stream_aggregated_with_usage(_isolated_db):
     _put_upstream("oll", protocol="ollama", base_url="http://o.test", api_key="",
                   models=[{"id": "qwen"}])
@@ -221,3 +261,116 @@ def test_models_lists_visible_enabled_only(_isolated_db):
 def test_chat_requires_token():
     assert client.post("/v1/chat/completions",
                        json={"model": "gw/m1", "messages": []}).status_code == 401
+
+
+# ---------- weknora 协议（智能体会话代理） ----------
+
+def _put_weknora(uid: str = "wk", **over) -> None:
+    body = {"name": "WeKnora", "protocol": "weknora", "base_url": "http://wk.test", "api_key": "sk-wk",
+            "enabled": True,
+            "models": [{"id": "baishitong", "name": "问问百事通", "agent_id": "agent-1"}]}
+    body.update(over)
+    resp = client.put(f"/admin/api/upstreams/{uid}", headers=ADMIN, json=body)
+    assert resp.status_code == 200, resp.text
+
+
+def _wk_sse(*frames: dict) -> httpx.Response:
+    body = "".join(f"event:message\ndata:{json.dumps(f, ensure_ascii=False)}\n\n" for f in frames)
+    return httpx.Response(200, text=body, headers={"content-type": "text/event-stream"})
+
+
+def _sse_chunks(resp: httpx.Response) -> list[dict]:
+    return [json.loads(line[5:]) for line in resp.text.splitlines()
+            if line.startswith("data:") and "[DONE]" not in line]
+
+
+_WK_FRAME_SET = (
+    {"response_type": "agent_query", "content": "", "done": True},
+    {"response_type": "session_title", "content": "标题", "done": True},
+    {"response_type": "thinking", "content": "先想", "done": False},
+    {"response_type": "answer", "content": "答案", "done": False},
+    {"response_type": "complete", "content": "", "done": True},
+)
+
+
+def _mock_wk(session_id: str = "sess-1", agent_id: str = "agent-1"):
+    create = respx.post("http://wk.test/api/v1/sessions").mock(
+        return_value=httpx.Response(200, json={"data": {"id": session_id}}))
+    chat = respx.post(f"http://wk.test/api/v1/agent-chat/{session_id}").mock(
+        return_value=_wk_sse(*_WK_FRAME_SET))
+    return create, chat
+
+
+@respx.mock
+def test_weknora_stream_translation(_isolated_db):
+    _put_weknora()
+    create, chat = _mock_wk()
+    resp = _chat("wk/baishitong", stream=True)
+    assert resp.status_code == 200
+    chunks = _sse_chunks(resp)
+    assert resp.text.endswith("data: [DONE]\n\n")
+    assert [c["choices"][0]["delta"] for c in chunks] == [
+        {"role": "assistant", "content": ""},
+        {"reasoning_content": "先想"},
+        {"content": "答案"},
+        {},
+    ]
+    assert chunks[-1]["choices"][0]["finish_reason"] == "stop"
+    # 会话绑定配置的智能体，API key 走 X-API-Key 头
+    assert json.loads(create.calls.last.request.content) == {"agent_id": "agent-1"}
+    assert create.calls.last.request.headers["x-api-key"] == "sk-wk"
+    assert chat.called
+    (row,) = _usage_rows(_isolated_db)
+    assert row[0] == "wk/baishitong" and row[1] == "wk" and row[6] == "ok" and row[2:5] == (0, 0, 0)
+
+
+@respx.mock
+def test_weknora_session_reused_across_calls(_isolated_db):
+    _put_weknora()
+    create, chat = _mock_wk()
+    assert _chat("wk/baishitong", stream=True).status_code == 200
+    assert _chat("wk/baishitong", stream=True).status_code == 200
+    assert create.call_count == 1  # 同一对话指纹复用会话，不重复建
+    assert chat.call_count == 2
+
+
+@respx.mock
+def test_weknora_recreates_expired_session(_isolated_db):
+    _put_weknora()
+    create = respx.post("http://wk.test/api/v1/sessions").mock(side_effect=[
+        httpx.Response(200, json={"data": {"id": "sess-old"}}),
+        httpx.Response(200, json={"data": {"id": "sess-new"}}),
+    ])
+    old = respx.post("http://wk.test/api/v1/agent-chat/sess-old").mock(
+        return_value=httpx.Response(404, json={"error": "session not found"}))
+    new = respx.post("http://wk.test/api/v1/agent-chat/sess-new").mock(
+        return_value=_wk_sse(*_WK_FRAME_SET))
+    resp = _chat("wk/baishitong", stream=True)
+    assert resp.status_code == 200
+    assert "答案" in resp.text
+    assert old.called and new.called
+    assert create.call_count == 2
+
+
+@respx.mock
+def test_weknora_non_stream_aggregates(_isolated_db):
+    _put_weknora()
+    _mock_wk()
+    resp = _chat("wk/baishitong")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["object"] == "chat.completion" and body["model"] == "wk/baishitong"
+    message = body["choices"][0]["message"]
+    assert message["content"] == "答案" and message["reasoning_content"] == "先想"
+    assert body["usage"]["total_tokens"] == 0
+    (row,) = _usage_rows(_isolated_db)
+    assert row[6] == "ok"
+
+
+@respx.mock
+def test_weknora_requires_user_message(_isolated_db):
+    _put_weknora()
+    resp = client.post("/v1/chat/completions", headers=AUTH,
+                       json={"model": "wk/baishitong", "messages": [{"role": "system", "content": "s"}]})
+    assert resp.status_code == 400
+    assert "user message" in resp.json()["error"]["message"]

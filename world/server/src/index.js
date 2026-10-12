@@ -3,7 +3,7 @@ import http from 'node:http'
 
 import { WebSocketServer } from 'ws'
 
-import { loadConfig, DEPTS, NICKNAME_MAX_LEN } from './config.js'
+import { loadConfig, DEPTS, NICKNAME_MAX_LEN, PALETTE_SIZE } from './config.js'
 import { Room } from './room.js'
 import { makeStaticHandler } from './static.js'
 import { Store } from './store.js'
@@ -76,6 +76,12 @@ export function createWorldServer(config = loadConfig(), { log = defaultLog } = 
           case 'chat':
             room.handleChat(session, msg)
             break
+          case 'house':
+            room.handleHouse(session, msg)
+            break
+          case 'emote':
+            room.handleEmote(session, msg)
+            break
           default:
             break // 未知类型忽略
         }
@@ -115,13 +121,17 @@ export function createWorldServer(config = loadConfig(), { log = defaultLog } = 
       const cid = typeof body?.cid === 'string' ? body.cid.trim() : ''
       const nickname = typeof body?.nickname === 'string' ? body.nickname.trim() : ''
       const dept = body?.dept
+      const color = body?.color
       if (!cid || cid.length > 128) return sendJson(res, 400, { error: 'invalid_cid' })
       if (nickname.length === 0 || nickname.length > NICKNAME_MAX_LEN) {
         return sendJson(res, 400, { error: 'invalid_nickname' })
       }
       if (!DEPTS.includes(dept)) return sendJson(res, 400, { error: 'invalid_dept' })
-      store.upsertProfile(cid, nickname, dept)
-      log(`profile cid=${cid} dept=${dept}`)
+      // color：0..PALETTE_SIZE-1 整数；缺省/非法一律按 null（前端回退部门色）
+      const colorNum =
+        typeof color === 'number' && Number.isInteger(color) && color >= 0 && color < PALETTE_SIZE ? color : null
+      store.upsertProfile(cid, nickname, dept, colorNum)
+      log(`profile cid=${cid} dept=${dept} color=${colorNum ?? '-'}`)
       return sendJson(res, 200, { ok: true })
     }
 

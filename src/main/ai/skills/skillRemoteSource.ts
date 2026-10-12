@@ -5,6 +5,7 @@ import { net } from 'electron'
 
 import { application } from '@application'
 import { loggerService } from '@logger'
+import { downloadGatewaySkillZip } from '@main/marketplace/gatewaySkills'
 import { getProxyEnvironment } from '@main/services/proxy/proxyEnv'
 import { findExecutableInEnv } from '@main/utils/commandResolver'
 import { findSkillMdPath, parseSkillMetadata } from '@main/utils/markdownParser'
@@ -105,6 +106,8 @@ const FETCHERS: Record<string, Fetcher> = {
   'claude-plugins': fetchFromClaudePlugins,
   'skills.sh': fetchFromSkillsSh,
   clawhub: fetchFromClawhub,
+  skillhub: fetchFromSkillhub,
+  gateway: fetchFromGateway,
   github: fetchFromGithub
 }
 
@@ -112,6 +115,7 @@ const FETCHERS: Record<string, Fetcher> = {
  * Fetch from a marketplace installSource handle.
  * Format: "claude-plugins:{owner}/{repo}/{directoryPath}",
  * "skills.sh:{owner}/{repo}/{skillId}", "clawhub:{owner}/{slug}",
+ * "skillhub:{namespaceHandle}/{slug}", "gateway:{pluginId}/{skillName}",
  * or "github:{https URL of the skill's SKILL.md}".
  */
 export async function fetchRemoteSkill(source: string, identifier: string): Promise<FetchedSkill> {
@@ -270,13 +274,85 @@ function getGithubTransportUrl(repoUrl: string): string {
   return `${mirror.toString().replace(/\/+$/, '')}/${repoUrl}`
 }
 
+/** Registry install handles are path segments of `[a-zA-Z0-9_.-]` — anything else is malformed. */
+const invalidRegistryPart = (part: string | undefined) => !part || !/^[a-zA-Z0-9_.-]+$/.test(part)
+
+/**
+ * Fetch a registry archive and enforce the advertised size cap **before** anything
+ * touches the disk — an oversized archive must be rejected without creating temp dirs.
+ */
+async function fetchRegistryArchive(url: string, sourceLabel: string): Promise<Response> {
+  const downloadResp = await net.fetch(url, {
+    headers: { 'User-Agent': 'CherryStudio' }
+  })
+
+  if (!downloadResp.ok) {
+    throw new Error(`${sourceLabel} download failed: HTTP ${downloadResp.status}`)
+  }
+
+  const advertisedSize = Number(downloadResp.headers.get('content-length') ?? NaN)
+  if (Number.isFinite(advertisedSize) && advertisedSize > MAX_SKILL_SIZE) {
+    await downloadResp.body?.cancel()
+    throw new Error(`${sourceLabel} archive advertises ${advertisedSize} bytes, over the ${MAX_SKILL_SIZE}-byte limit`)
+  }
+
+  return downloadResp
+}
+
+/** Stream a fetched registry archive to `zipPath`. The running count is what enforces the cap. */
+async function writeRegistryArchive(downloadResp: Response, zipPath: string, sourceLabel: string): Promise<void> {
+  const handle = await fs.promises.open(zipPath, 'w')
+  try {
+    let received = 0
+    for await (const chunk of downloadResp.body as unknown as AsyncIterable<Uint8Array>) {
+      received += chunk.byteLength
+      if (received > MAX_SKILL_SIZE) {
+        throw new Error(`${sourceLabel} archive exceeds the ${MAX_SKILL_SIZE}-byte limit`)
+      }
+      for (let offset = 0; offset < chunk.byteLength;) {
+        offset += (await handle.write(chunk, offset)).bytesWritten
+      }
+    }
+  } finally {
+    await handle.close()
+  }
+}
+
+/**
+ * Validate a downloaded registry archive as one published skill bundle: a single
+ * descriptor at the archive root, within size limits, and metadata matching the
+ * requested skill so a registry can never swap the payload under a listing entry.
+ */
+async function extractAndValidateRegistryZip(
+  zipPath: string,
+  extractDir: string,
+  slug: string,
+  sourceLabel: string,
+  subject: string
+): Promise<string> {
+  await fs.promises.mkdir(extractDir, { recursive: true })
+  await extractZip(zipPath, extractDir)
+  // Registries serve one published skill bundle whose descriptor is at the archive root. Nested
+  // SKILL.md files are supporting content, not alternative install candidates.
+  const skillMdPath = await findSkillMdPath(extractDir)
+  if (!skillMdPath) {
+    throw new Error(`No SKILL.md found at the ${sourceLabel} archive root: ${subject}`)
+  }
+  const skillDir = await validateRepositorySkillDirectory(extractDir, extractDir, skillMdPath)
+  await assertSkillDirectoryWithinLimits(skillDir)
+  const metadata = await parseSkillMetadata(skillDir, slug, 'skills', { calculateSize: false })
+  if ((metadata.slug ?? metadata.name).toLowerCase() !== slug.toLowerCase()) {
+    throw new Error(`${sourceLabel} archive did not match the requested skill: ${subject}`)
+  }
+  return skillDir
+}
+
 async function fetchFromClawhub(
   identifier: string,
   openTempDir: () => Promise<string>
 ): Promise<Omit<FetchedSkill, 'tempDir'>> {
   const [ownerHandle, slug, ...extraParts] = identifier.split('/')
-  const invalidPart = (part: string | undefined) => !part || !/^[a-zA-Z0-9_.-]+$/.test(part)
-  if (extraParts.length > 0 || invalidPart(ownerHandle) || invalidPart(slug)) {
+  if (extraParts.length > 0 || invalidRegistryPart(ownerHandle) || invalidRegistryPart(slug)) {
     throw new Error(`Invalid clawhub identifier: ${identifier}`)
   }
 
@@ -315,55 +391,72 @@ async function fetchFromClawhub(
   const downloadUrl = new URL('https://clawhub.ai/api/v1/download')
   downloadUrl.searchParams.set('slug', slug)
   downloadUrl.searchParams.set('ownerHandle', ownerHandle)
-  const downloadResp = await net.fetch(downloadUrl.toString(), {
-    headers: { 'User-Agent': 'CherryStudio' }
-  })
-
-  if (!downloadResp.ok) {
-    throw new Error(`clawhub download failed: HTTP ${downloadResp.status}`)
-  }
-
-  const advertisedSize = Number(downloadResp.headers.get('content-length') ?? NaN)
-  if (Number.isFinite(advertisedSize) && advertisedSize > MAX_SKILL_SIZE) {
-    await downloadResp.body?.cancel()
-    throw new Error(`clawhub archive advertises ${advertisedSize} bytes, over the ${MAX_SKILL_SIZE}-byte limit`)
-  }
+  const downloadResp = await fetchRegistryArchive(downloadUrl.toString(), 'clawhub')
 
   const tempDir = await openTempDir()
   const zipPath = path.join(tempDir, 'skill.zip')
-  // Content-Length is server-controlled; the running count is what enforces the cap.
-  const handle = await fs.promises.open(zipPath, 'w')
-  try {
-    let received = 0
-    for await (const chunk of downloadResp.body as unknown as AsyncIterable<Uint8Array>) {
-      received += chunk.byteLength
-      if (received > MAX_SKILL_SIZE) {
-        throw new Error(`clawhub archive exceeds the ${MAX_SKILL_SIZE}-byte limit`)
-      }
-      for (let offset = 0; offset < chunk.byteLength;) {
-        offset += (await handle.write(chunk, offset)).bytesWritten
-      }
-    }
-  } finally {
-    await handle.close()
-  }
+  await writeRegistryArchive(downloadResp, zipPath, 'clawhub')
   const extractDir = path.join(tempDir, sanitizeFolderName(slug))
-  await fs.promises.mkdir(extractDir, { recursive: true })
-  await extractZip(zipPath, extractDir)
-  // ClawHub serves one published skill bundle whose descriptor is at the archive root. Nested
-  // SKILL.md files are supporting content, not alternative install candidates.
-  const skillMdPath = await findSkillMdPath(extractDir)
-  if (!skillMdPath) {
-    throw new Error(`No SKILL.md found at the clawhub archive root: ${identifier}`)
-  }
-  const skillDir = await validateRepositorySkillDirectory(extractDir, extractDir, skillMdPath)
-  await assertSkillDirectoryWithinLimits(skillDir)
-  const metadata = await parseSkillMetadata(skillDir, slug, 'skills', { calculateSize: false })
-  if ((metadata.slug ?? metadata.name).toLowerCase() !== slug.toLowerCase()) {
-    throw new Error(`clawhub archive did not match the requested skill: ${identifier}`)
-  }
+  const skillDir = await extractAndValidateRegistryZip(zipPath, extractDir, slug, 'clawhub', identifier)
 
   return { skillDir, sourceUrl: `https://clawhub.ai/${ownerHandle}/skills/${slug}` }
+}
+
+/**
+ * Company gateway — single skills published inside enterprise plugin packs.
+ * Handle `gateway:{pluginId}/{skillName}`; the gateway module resolves the
+ * skill's zip via the plugin manifest (with client-token auth) and the same
+ * zip validation as every other registry applies. Provenance records the
+ * gateway file URL, identical to a full-pack install of the same skill.
+ */
+async function fetchFromGateway(
+  identifier: string,
+  openTempDir: () => Promise<string>
+): Promise<Omit<FetchedSkill, 'tempDir'>> {
+  const [pluginId, skillName, ...extraParts] = identifier.split('/')
+  if (extraParts.length > 0 || invalidRegistryPart(pluginId) || invalidRegistryPart(skillName)) {
+    throw new Error(`Invalid gateway identifier: ${identifier}`)
+  }
+
+  // The gateway module resolves the manifest before opening the temp dir, so a
+  // handle naming a skill the pack does not publish never touches the disk.
+  const { zipPath, fileUrl } = await downloadGatewaySkillZip(pluginId, skillName, openTempDir)
+  const tempDir = path.dirname(zipPath)
+  const extractDir = path.join(tempDir, sanitizeFolderName(skillName))
+  const skillDir = await extractAndValidateRegistryZip(zipPath, extractDir, skillName, 'gateway', identifier)
+
+  return { skillDir, sourceUrl: fileUrl }
+}
+
+/**
+ * skillhub.cn — Tencent-hosted CN skill store whose catalog largely mirrors the
+ * ClawHub ecosystem. The install handle is `skillhub:{namespaceHandle}/{slug}`;
+ * unlike clawhub there is no detail round-trip, the download endpoint serves the
+ * published bundle zip directly.
+ */
+async function fetchFromSkillhub(
+  identifier: string,
+  openTempDir: () => Promise<string>
+): Promise<Omit<FetchedSkill, 'tempDir'>> {
+  const [handle, slug, ...extraParts] = identifier.split('/')
+  if (extraParts.length > 0 || invalidRegistryPart(handle) || invalidRegistryPart(slug)) {
+    throw new Error(`Invalid skillhub identifier: ${identifier}`)
+  }
+
+  const downloadUrl = new URL('https://api.skillhub.cn/api/v1/download')
+  downloadUrl.searchParams.set('slug', slug)
+  downloadUrl.searchParams.set('namespace', handle)
+  const downloadResp = await fetchRegistryArchive(downloadUrl.toString(), 'skillhub')
+
+  const tempDir = await openTempDir()
+  const zipPath = path.join(tempDir, 'skill.zip')
+  await writeRegistryArchive(downloadResp, zipPath, 'skillhub')
+  const extractDir = path.join(tempDir, sanitizeFolderName(slug))
+  const skillDir = await extractAndValidateRegistryZip(zipPath, extractDir, slug, 'skillhub', identifier)
+
+  // Store the browsable site page (not the api host) so provenance round-trips through
+  // parseSkillSourceUrl and the source link opens a real detail view.
+  return { skillDir, sourceUrl: `https://skillhub.cn/skills/${handle}/${slug}` }
 }
 
 /**

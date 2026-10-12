@@ -1,12 +1,18 @@
-// Lowpoly 小人化身（PRD D6）：头/身体/四肢拼装，部门色着色，头顶名字牌（Sprite）。
-// 支持行走摆动（含轻微上下 bob）与「坐姿办公」姿态（在线不在场者）。
-// 朝向约定：ry=0 时面朝 +Z，前方 = (sin ry, cos ry)——与服务端转发的 ry 及 deskSpot.ry 一致。
+// Lowpoly 小人化身（v2 §4）：头/身体/四肢拼装，外观配色着色，头顶名牌（昵称+部门，
+// 等级头衔前缀预留）。支持行走摆动（含轻微上下 bob）与动作姿态（挥手/鼓掌/跳舞，
+// 快捷键 1/2/3；随 pos.anim 同步给他人）。
+// 朝向约定：ry=0 时面朝 +Z，前方 = (sin ry, cos ry)。
 
 import * as THREE from 'three'
 
 const SKIN = 0xe8b78c
 const HAIR = 0x2f2a26
 const PANTS = 0x39465a
+
+/** 动作时长（秒）；与 anim 字段同步：'wave' | 'clap' | 'dance' */
+export const GESTURES = ['wave', 'clap', 'dance'] as const
+export type GestureName = (typeof GESTURES)[number]
+export const GESTURE_SEC = 2.6
 
 // 共享几何（顶点在创建时平移，使四肢可绕髋/肩旋转）
 const geoTorso = new THREE.BoxGeometry(0.46, 0.62, 0.26)
@@ -31,20 +37,21 @@ export class Avatar {
 
   private phase = 0
   private walkBlend = 0
-  seated = false
+  private gesture: GestureName | null = null
+  private gestureLeft = 0
 
-  constructor(color: number, nickname: string) {
+  constructor(color: number, nickname: string, dept = '') {
     const lam = (c: number) => {
       const m = new THREE.MeshLambertMaterial({ color: c, flatShading: true })
       this.disposables.push(m)
       return m
     }
-    const mDept = lam(color)
+    const mBody = lam(color)
     const mSkin = lam(SKIN)
     const mHair = lam(HAIR)
     const mPants = lam(PANTS)
 
-    const torso = new THREE.Mesh(geoTorso, mDept)
+    const torso = new THREE.Mesh(geoTorso, mBody)
     torso.position.y = 1.12
     torso.castShadow = true
 
@@ -62,8 +69,8 @@ export class Avatar {
       this.body.add(pivot)
       return pivot
     }
-    this.armL = limb(mDept, -0.32, 1.4)
-    this.armR = limb(mDept, 0.32, 1.4)
+    this.armL = limb(mBody, -0.32, 1.4)
+    this.armR = limb(mBody, 0.32, 1.4)
     const leg = (x: number) => {
       const pivot = new THREE.Group()
       pivot.position.set(x, 0.8, 0)
@@ -79,44 +86,38 @@ export class Avatar {
     this.body.add(torso, this.head)
     this.group.add(this.body)
 
-    // 名字牌
-    const nameTex = makeNameTexture(nickname)
+    // 名字牌（昵称 + 部门；titlePrefix 预留等级头衔，M2 填充）
+    const nameTex = makeNameTexture(nickname, dept, '')
     this.disposables.push(nameTex)
     const sm = new THREE.SpriteMaterial({ map: nameTex, depthWrite: false })
     this.disposables.push(sm)
     this.nameSprite = new THREE.Sprite(sm)
-    this.nameSprite.scale.set(1.9, 0.53, 1)
-    this.nameSprite.position.y = 2.2
+    this.nameSprite.scale.set(2.1, 0.62, 1)
+    this.nameSprite.position.y = 2.3
     this.group.add(this.nameSprite)
   }
 
-  /** 坐姿（工位办公）与起身。世界坐标/朝向由调用方设置在 group 上。 */
-  setSeated(v: boolean): void {
-    this.seated = v
-    if (v) {
-      this.legL.rotation.x = -1.45
-      this.legR.rotation.x = -1.45
-      this.armL.rotation.x = -0.9
-      this.armR.rotation.x = -0.9
-      this.head.rotation.x = 0.32 // 低头办公
-      this.body.position.y = -0.34
-      this.nameSprite.position.y = 1.75
-      this.walkBlend = 0
-    } else {
-      this.legL.rotation.x = 0
-      this.legR.rotation.x = 0
-      this.armL.rotation.x = 0
-      this.armR.rotation.x = 0
-      this.head.rotation.x = 0
-      this.body.position.y = 0
-      this.nameSprite.position.y = 2.2
-      this.phase = 0
-    }
+  /** 播放动作（同名动作播放中则不重启动）；远端同款由 pos.anim 触发 */
+  playGesture(name: GestureName): void {
+    if (this.gesture === name && this.gestureLeft > 0) return
+    this.gesture = name
+    this.gestureLeft = GESTURE_SEC
+    this.walkBlend = 0
   }
 
-  /** 每帧调用：walking 时四肢摆动 + 身体微 bob；坐姿时忽略 */
+  get activeGesture(): GestureName | null {
+    return this.gestureLeft > 0 ? this.gesture : null
+  }
+
+  /** 每帧调用：动作姿态优先，其次行走摆动 */
   setWalking(walking: boolean, dt: number): void {
-    if (this.seated) return
+    if (this.gestureLeft > 0 && this.gesture) {
+      this.gestureLeft -= dt
+      this.phase += dt * 7
+      this.applyGesture(this.gesture)
+      if (this.gestureLeft <= 0) this.resetPose()
+      return
+    }
     this.walkBlend += ((walking ? 1 : 0) - this.walkBlend) * Math.min(1, dt * 10)
     if (walking) this.phase += dt * 9
     const s = Math.sin(this.phase) * this.walkBlend
@@ -125,6 +126,52 @@ export class Avatar {
     this.armL.rotation.x = -s * 0.4
     this.armR.rotation.x = s * 0.4
     this.body.position.y = Math.abs(Math.sin(this.phase)) * 0.05 * this.walkBlend
+    this.body.rotation.z = 0
+  }
+
+  private applyGesture(name: GestureName): void {
+    const t = this.phase
+    switch (name) {
+      case 'wave': {
+        this.armR.rotation.x = 0
+        this.armR.rotation.z = -2.6 + Math.sin(t * 2.2) * 0.35 // 右臂上举摆动
+        this.armL.rotation.x = 0
+        this.body.rotation.z = 0
+        this.body.position.y = 0
+        break
+      }
+      case 'clap': {
+        const c = Math.abs(Math.sin(t * 2.6)) * 0.55
+        this.armL.rotation.x = -1.15
+        this.armR.rotation.x = -1.15
+        this.armL.rotation.z = -c
+        this.armR.rotation.z = c
+        this.body.position.y = Math.abs(Math.sin(t * 2.6)) * 0.04
+        this.body.rotation.z = 0
+        break
+      }
+      case 'dance': {
+        this.armL.rotation.x = -2.4 + Math.sin(t) * 0.5
+        this.armR.rotation.x = -2.4 - Math.sin(t) * 0.5
+        this.armL.rotation.z = 0.35
+        this.armR.rotation.z = -0.35
+        this.body.rotation.z = Math.sin(t) * 0.16
+        this.body.position.y = Math.abs(Math.sin(t * 2)) * 0.08
+        this.legL.rotation.x = Math.sin(t) * 0.3
+        this.legR.rotation.x = -Math.sin(t) * 0.3
+        break
+      }
+    }
+  }
+
+  private resetPose(): void {
+    this.legL.rotation.set(0, 0, 0)
+    this.legR.rotation.set(0, 0, 0)
+    this.armL.rotation.set(0, 0, 0)
+    this.armR.rotation.set(0, 0, 0)
+    this.body.rotation.z = 0
+    this.body.position.y = 0
+    this.phase = 0
   }
 
   dispose(scene: THREE.Scene): void {
@@ -133,10 +180,10 @@ export class Avatar {
   }
 }
 
-function makeNameTexture(nickname: string): THREE.CanvasTexture {
-  const label = (nickname || '同事').slice(0, 12)
+function makeNameTexture(nickname: string, dept: string, titlePrefix: string): THREE.CanvasTexture {
+  const label = `${titlePrefix}${(nickname || '同事').slice(0, 12)}`
   const w = 256
-  const h = 72
+  const h = 96
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
@@ -147,15 +194,20 @@ function makeNameTexture(nickname: string): THREE.CanvasTexture {
   ctx.strokeStyle = 'rgba(255,255,255,0.18)'
   ctx.lineWidth = 2
   ctx.stroke()
-  let size = 34
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
+  let size = 32
   do {
     ctx.font = `600 ${size}px "PingFang SC", "Microsoft YaHei", sans-serif`
     size -= 2
   } while (ctx.measureText(label).width > w - 36 && size > 16)
   ctx.fillStyle = '#ffffff'
-  ctx.fillText(label, w / 2, h / 2 + 2)
+  ctx.fillText(label, w / 2, dept ? h / 2 - 10 : h / 2 + 2)
+  if (dept) {
+    ctx.font = '400 22px "PingFang SC", "Microsoft YaHei", sans-serif'
+    ctx.fillStyle = '#aebfd8'
+    ctx.fillText(dept.slice(0, 8), w / 2, h / 2 + 20)
+  }
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
   return tex

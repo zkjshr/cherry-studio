@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildGithubSkillResult, parseGithubSkillUrl, parseSkillSourceUrl } from '@shared/utils/skillMarketplace'
+import {
+  buildGithubSkillResult,
+  normalizeSkillhub,
+  normalizeSkillhubShowcase,
+  parseGithubSkillUrl,
+  parseSkillSourceUrl
+} from '@shared/utils/skillMarketplace'
 
 describe('parseGithubSkillUrl', () => {
   it('reads owner, repo and the undivided ref-and-path from a blob URL', () => {
@@ -117,6 +123,10 @@ describe('parseSkillSourceUrl', () => {
     ],
     ['https://clawhub.ai/owner/skills/writer', { sourceRegistry: 'clawhub.ai', installSource: 'clawhub:owner/writer' }],
     [
+      'https://skillhub.cn/skills/hub_tester/demo',
+      { sourceRegistry: 'skillhub.cn', installSource: 'skillhub:hub_tester/demo' }
+    ],
+    [
       'https://github.com/owner/repo/tree/main/skills/writer',
       {
         sourceRegistry: 'claude-plugins.dev',
@@ -138,8 +148,86 @@ describe('parseSkillSourceUrl', () => {
     'https://github.com/owner/repo',
     'https://skills.sh/owner/repo',
     'https://github.com/owner/repo/tree/main',
-    'https://github.com/owner/repo/tree/feature/skills/writer'
+    'https://github.com/owner/repo/tree/feature/skills/writer',
+    // The api host only serves API verbs — it must never round-trip as a source URL.
+    'https://api.skillhub.cn/hub_tester/demo',
+    'https://skillhub.cn/hub_tester/demo',
+    'https://skillhub.cn/skills/hub_tester',
+    'https://skillhub.cn/skills/hub_tester/demo/extra'
   ])('rejects a source URL that does not identify one exact Skill (%s)', (sourceUrl) => {
     expect(parseSkillSourceUrl(sourceUrl)).toBeNull()
+  })
+})
+
+describe('normalizeSkillhub', () => {
+  it('builds install handles from the namespace and prefers the Chinese description', () => {
+    expect(
+      normalizeSkillhub({
+        results: [
+          {
+            slug: 'document-pdf',
+            name: 'Pdf',
+            displayName: 'Pdf',
+            description: 'PDF toolkit',
+            description_zh: 'PDF 处理工具包',
+            downloads: 24075,
+            stars: 3,
+            icon_url: 'https://example.com/icon.png',
+            namespace: { handle: 'clawhub_kidaiangel', publicSlug: 'document-pdf' }
+          }
+        ]
+      })
+    ).toEqual([
+      {
+        slug: 'document-pdf',
+        name: 'Pdf',
+        description: 'PDF 处理工具包',
+        author: 'clawhub_kidaiangel',
+        stars: 3,
+        downloads: 24075,
+        sourceRegistry: 'skillhub.cn',
+        sourceUrl: 'https://skillhub.cn/skills/clawhub_kidaiangel/document-pdf',
+        iconUrl: 'https://example.com/icon.png',
+        installSource: 'skillhub:clawhub_kidaiangel/document-pdf'
+      }
+    ])
+  })
+
+  it('drops items without a namespace handle so no result ships an unresolvable install handle', () => {
+    expect(normalizeSkillhub({ results: [{ slug: 'handle-less', name: 'X' }] })).toEqual([])
+  })
+
+  it('normalizes showcase payloads (section + skills, camelCase icon)', () => {
+    expect(
+      normalizeSkillhubShowcase({
+        section: 'hot_downloads',
+        skills: [
+          {
+            slug: 'demo',
+            name: 'Demo',
+            iconUrl: 'https://example.com/hot.png',
+            namespace: { handle: 'hub_tester' }
+          }
+        ]
+      })
+    ).toEqual([
+      {
+        slug: 'demo',
+        name: 'Demo',
+        description: null,
+        author: 'hub_tester',
+        stars: 0,
+        downloads: 0,
+        sourceRegistry: 'skillhub.cn',
+        sourceUrl: 'https://skillhub.cn/skills/hub_tester/demo',
+        iconUrl: 'https://example.com/hot.png',
+        installSource: 'skillhub:hub_tester/demo'
+      }
+    ])
+  })
+
+  it('rejects payloads with an unexpected shape', () => {
+    expect(() => normalizeSkillhub({ nope: true })).toThrow('Invalid skillhub.cn search response')
+    expect(() => normalizeSkillhubShowcase({ skills: [] })).toThrow('Invalid skillhub.cn showcase response')
   })
 })

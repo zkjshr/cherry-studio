@@ -19,17 +19,21 @@
  * not appear on a fresh enterprise install.
  */
 
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 
 import { application } from '@application'
 import { ENDPOINT_TYPE } from '@cherrystudio/provider-registry'
 import { preferenceTable } from '@data/db/schemas/preference'
+import { topicTable } from '@data/db/schemas/topic'
 import { assistantDataService } from '@data/services/AssistantService'
+import { messageService } from '@data/services/MessageService'
 import { mcpServerService } from '@data/services/McpServerService'
 import { miniAppService } from '@data/services/MiniAppService'
 import { modelService } from '@data/services/ModelService'
+import { pinService } from '@data/services/PinService'
 import { providerService } from '@data/services/ProviderService'
+import { topicService } from '@data/services/TopicService'
 import { loggerService } from '@logger'
 import { DataApiError, ErrorCode } from '@shared/data/api/errors'
 import type { CreateModelDto } from '@shared/data/api/schemas/models'
@@ -43,6 +47,7 @@ import { ENTERPRISE_MANAGED_ASSISTANT_IDS_KEY, ENTERPRISE_WORLD_URL_KEY } from '
 import type {
   EnterpriseAssistantConfig,
   EnterpriseClientConfig,
+  EnterprisePinnedTopicConfig,
   EnterpriseProviderConfig
 } from './enterpriseConfigTypes'
 import { toEnterpriseWorldUrl } from './enterpriseConfigTypes'
@@ -335,6 +340,7 @@ async function applyAssistants(config: EnterpriseClientConfig, result: ApplyEnte
     const mcpServerIds = item.mcp_server_ids?.map((name) => resolveMcpServerId(name, item.name))
 
     const matched = assistantsByName.get(item.name)
+    let assistantId: string
     if (matched) {
       assistantDataService.update(matched.id, {
         ...(item.prompt !== undefined ? { prompt: item.prompt } : {}),
@@ -344,6 +350,7 @@ async function applyAssistants(config: EnterpriseClientConfig, result: ApplyEnte
         ...(item.settings !== undefined ? { settings } : {}),
         ...(mcpServerIds !== undefined ? { mcpServerIds } : {})
       })
+      assistantId = matched.id
       if (item.managed) managedAssistantIds.push(matched.id)
     } else {
       const created = assistantDataService.create({
@@ -355,13 +362,90 @@ async function applyAssistants(config: EnterpriseClientConfig, result: ApplyEnte
         ...(item.settings !== undefined ? { settings } : {}),
         ...(mcpServerIds !== undefined ? { mcpServerIds } : {})
       })
+      assistantId = created.id
       if (item.managed) managedAssistantIds.push(created.id)
       assistantsByName.set(created.name, created)
+    }
+    if (item.pinned_topic) {
+      ensurePinnedTopic(assistantId, item.pinned_topic)
     }
     result.assistantsApplied++
   }
 
   return managedAssistantIds
+}
+
+const ENTERPRISE_PINNED_TOPICS_KEY = 'enterprise.pinned_topics'
+
+/**
+ * Create (once) and keep pinned the conversation the gateway pushes with a
+ * managed assistant — e.g. the WeKnora-backed 问问百事通 topic.
+ *
+ * Idempotency: topic ids created here are remembered in the
+ * `enterprise.pinned_topics` preference row (assistantId → topicId), so a
+ * repeated apply converges to "topic exists + pin exists" without duplicates.
+ * The topic is user data once created — removing `pinned_topic` from the
+ * config does NOT delete it (non-destructive, mirroring pin semantics), but a
+ * user's manual unpin is re-asserted on the next apply, same trade-off as the
+ * managed-assistant guard.
+ */
+function ensurePinnedTopic(assistantId: string, pinned: EnterprisePinnedTopicConfig): void {
+  const mapping = readPinnedTopicMapping()
+  const existingTopicId = mapping[assistantId]?.topicId
+  if (existingTopicId && topicRowExists(existingTopicId)) {
+    pinService.pin({ entityType: 'topic', entityId: existingTopicId })
+    return
+  }
+
+  const topic = topicService.create({ name: pinned.name, assistantId })
+  const welcome = pinned.welcome?.trim()
+  if (welcome) {
+    messageService.create(topic.id, {
+      parentId: null,
+      role: 'assistant',
+      data: { parts: [{ type: 'text', text: welcome }] },
+      status: 'success'
+    })
+  }
+  pinService.pin({ entityType: 'topic', entityId: topic.id })
+
+  mapping[assistantId] = { topicId: topic.id }
+  upsertUndeclaredPreferenceRow(ENTERPRISE_PINNED_TOPICS_KEY, mapping)
+  logger.info('Created enterprise pinned topic', { assistantId, topicId: topic.id, name: pinned.name })
+}
+
+function readPinnedTopicMapping(): Record<string, { topicId: string }> {
+  try {
+    const db = application.get('DbService').getDb()
+    const [row] = db
+      .select({ value: preferenceTable.value })
+      .from(preferenceTable)
+      .where(and(eq(preferenceTable.scope, PREFERENCE_SCOPE_DEFAULT), eq(preferenceTable.key, ENTERPRISE_PINNED_TOPICS_KEY)))
+      .limit(1)
+      .all()
+    if (!row || typeof row.value !== 'object' || row.value === null) return {}
+    return Object.fromEntries(
+      Object.entries(row.value).filter(
+        (entry): entry is [string, { topicId: string }] =>
+          typeof entry[1] === 'object' && entry[1] !== null && typeof (entry[1] as { topicId?: unknown }).topicId === 'string'
+      )
+    )
+  } catch (error) {
+    logger.warn('Failed to read pinned-topic mapping; starting fresh', error as Error)
+    return {}
+  }
+}
+
+function topicRowExists(topicId: string): boolean {
+  const [row] = application
+    .get('DbService')
+    .getDb()
+    .select({ id: topicTable.id })
+    .from(topicTable)
+    .where(and(eq(topicTable.id, topicId), isNull(topicTable.deletedAt)))
+    .limit(1)
+    .all()
+  return row !== undefined
 }
 
 async function listAllAssistantsByName(): Promise<Map<string, Assistant>> {

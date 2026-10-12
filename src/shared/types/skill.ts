@@ -10,7 +10,13 @@ import * as z from 'zod'
 // Search source registries
 // ============================================================================
 
-export const SkillSearchSourceSchema = z.enum(['claude-plugins.dev', 'skills.sh', 'clawhub.ai', 'github'])
+export const SkillSearchSourceSchema = z.enum([
+  'claude-plugins.dev',
+  'skills.sh',
+  'clawhub.ai',
+  'skillhub.cn',
+  'github'
+])
 export type SkillSearchSource = z.infer<typeof SkillSearchSourceSchema>
 
 // ============================================================================
@@ -118,6 +124,51 @@ export const ClawhubSkillDetailSchema = z.object({
 export type ClawhubSkillDetail = z.infer<typeof ClawhubSkillDetailSchema>
 
 // ============================================================================
+// API response schemas — skillhub.cn
+// ============================================================================
+
+/**
+ * skillhub.cn search/showcase item. The search API serves `icon_url` while the
+ * showcase APIs serve `iconUrl`; both stay optional so one schema covers both.
+ * Unknown fields are stripped — the platform adds moderation/claim metadata we
+ * deliberately do not rely on.
+ */
+export const SkillhubSkillItemSchema = z.object({
+  slug: z.string(),
+  name: z.string(),
+  displayName: z.string().nullish(),
+  description: z.string().nullish(),
+  description_zh: z.string().nullish(),
+  summary: z.string().nullish(),
+  version: z.string().nullish(),
+  author: z.string().nullish(),
+  owner_name: z.string().nullish(),
+  downloads: z.number().nullish(),
+  installs: z.number().nullish(),
+  stars: z.number().nullish(),
+  category: z.string().nullish(),
+  homepage: z.string().nullish(),
+  icon_url: z.string().nullish(),
+  iconUrl: z.string().nullish(),
+  namespace: z
+    .object({
+      handle: z.string().nullish(),
+      publicSlug: z.string().nullish()
+    })
+    .nullish()
+})
+export type SkillhubSkillItem = z.infer<typeof SkillhubSkillItemSchema>
+
+export const SkillhubSearchResponseSchema = z.object({
+  results: z.array(SkillhubSkillItemSchema)
+})
+
+export const SkillhubShowcaseResponseSchema = z.object({
+  section: z.string(),
+  skills: z.array(SkillhubSkillItemSchema)
+})
+
+// ============================================================================
 // Unified skill search result (normalized across all sources)
 // ============================================================================
 
@@ -130,6 +181,7 @@ export const SkillSearchResultSchema = z.object({
   downloads: z.number().default(0),
   sourceRegistry: SkillSearchSourceSchema,
   sourceUrl: z.string().nullable().default(null), // URL to the skill's page on the registry
+  iconUrl: z.string().nullable().default(null), // registry-hosted icon for market cards
   installSource: z.string() // opaque handle passed to install IPC
 })
 export type SkillSearchResult = z.infer<typeof SkillSearchResultSchema>

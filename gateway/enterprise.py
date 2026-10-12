@@ -74,10 +74,27 @@ def _connect() -> sqlite3.Connection:
     )
     conn.execute(
         "CREATE TABLE IF NOT EXISTS upstreams ("
-        "id TEXT PRIMARY KEY, name TEXT NOT NULL, protocol TEXT NOT NULL CHECK(protocol IN ('openai','ollama')), "
+        "id TEXT PRIMARY KEY, name TEXT NOT NULL, "
+        "protocol TEXT NOT NULL CHECK(protocol IN ('openai','ollama','weknora')), "
         "base_url TEXT NOT NULL, api_key TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1, "
         "models TEXT NOT NULL DEFAULT '[]', updated_at TEXT)"
     )
+    # 老库 CHECK 不含 weknora：SQLite 无法 ALTER 约束，检测后整表重建（本库无外键引用，安全）
+    up_sql = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='upstreams'").fetchone()
+    if up_sql and "weknora" not in up_sql[0]:
+        conn.execute("ALTER TABLE upstreams RENAME TO upstreams_old")
+        conn.execute(
+            "CREATE TABLE upstreams ("
+            "id TEXT PRIMARY KEY, name TEXT NOT NULL, "
+            "protocol TEXT NOT NULL CHECK(protocol IN ('openai','ollama','weknora')), "
+            "base_url TEXT NOT NULL, api_key TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1, "
+            "models TEXT NOT NULL DEFAULT '[]', updated_at TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO upstreams SELECT id, name, protocol, base_url, api_key, enabled, models, updated_at"
+            " FROM upstreams_old")
+        conn.execute("DROP TABLE upstreams_old")
     conn.execute(
         "CREATE TABLE IF NOT EXISTS admin_settings ("
         "key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT)"
@@ -101,6 +118,15 @@ def _connect() -> sqlite3.Connection:
         "CREATE TABLE IF NOT EXISTS usage_log ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, model TEXT NOT NULL, upstream_id TEXT, "
         "prompt_tokens INTEGER, completion_tokens INTEGER, total_tokens INTEGER, duration_ms INTEGER, status TEXT)"
+    )
+    # admin_assistants.pinned_topic：企业下发"置顶对话"（ALTER ADD COLUMN 需探测幂等）
+    a_cols = {r[1] for r in conn.execute("PRAGMA table_info(admin_assistants)").fetchall()}
+    if "pinned_topic" not in a_cols:
+        conn.execute("ALTER TABLE admin_assistants ADD COLUMN pinned_topic TEXT")
+    # WeKnora 会话映射：客户端对话指纹 → WeKnora session_id（model_proxy 的 weknora 协议读写）
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS weknora_sessions ("
+        "conv_key TEXT PRIMARY KEY, session_id TEXT NOT NULL, agent_id TEXT NOT NULL, created_at TEXT)"
     )
     conn.commit()
     _conn, _conn_path = conn, path
@@ -160,6 +186,33 @@ def delete_upstream(uid: str) -> None:
         conn.commit()
 
 
+# ---------- WeKnora 会话映射（model_proxy 的 weknora 协议读写） ----------
+
+def get_weknora_session(conv_key: str) -> dict | None:
+    """按对话指纹取映射；不存在返回 None（调用方按需懒建会话）。"""
+    with _lock:
+        row = _connect().execute(
+            "SELECT conv_key, session_id, agent_id FROM weknora_sessions WHERE conv_key=?", (conv_key,)).fetchone()
+    return {"conv_key": row[0], "session_id": row[1], "agent_id": row[2]} if row else None
+
+
+def save_weknora_session(conv_key: str, session_id: str, agent_id: str) -> None:
+    with _lock:
+        conn = _connect()
+        conn.execute(
+            "INSERT OR REPLACE INTO weknora_sessions (conv_key, session_id, agent_id, created_at)"
+            " VALUES (?,?,?,?)", (conv_key, session_id, agent_id, _now()))
+        conn.commit()
+
+
+def delete_weknora_session(conv_key: str) -> None:
+    """会话在 WeKnora 侧失效（404）后清除映射，供重建。"""
+    with _lock:
+        conn = _connect()
+        conn.execute("DELETE FROM weknora_sessions WHERE conv_key=?", (conv_key,))
+        conn.commit()
+
+
 # ---------- 设置 ----------
 
 def get_settings() -> dict:
@@ -189,10 +242,10 @@ def save_settings(data: dict) -> None:
 def _assistant_row(row) -> dict:
     return {"id": row[0], "name": row[1], "prompt": row[2], "emoji": row[3], "description": row[4],
             "model_ref": row[5], "settings": json.loads(row[6]), "mcp_names": json.loads(row[7]),
-            "updated_at": row[8]}
+            "updated_at": row[8], "pinned_topic": json.loads(row[9]) if row[9] else None}
 
 
-_ASSISTANT_COLS = "id, name, prompt, emoji, description, model_ref, settings, mcp_names, updated_at"
+_ASSISTANT_COLS = "id, name, prompt, emoji, description, model_ref, settings, mcp_names, updated_at, pinned_topic"
 
 
 def list_assistants() -> list[dict]:
@@ -216,10 +269,11 @@ def upsert_assistant(aid: str, data: dict) -> None:
         if row is not None:
             raise ConflictError(f"assistant name '{data['name']}' already used by {row[0]}")
         conn.execute(
-            f"INSERT OR REPLACE INTO admin_assistants ({_ASSISTANT_COLS}) VALUES (?,?,?,?,?,?,?,?,?)",
+            f"INSERT OR REPLACE INTO admin_assistants ({_ASSISTANT_COLS}) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (aid, data["name"], data["prompt"], data["emoji"], data["description"], data["model_ref"],
              json.dumps(data["settings"], ensure_ascii=False, allow_nan=False),
-             json.dumps(data["mcp_names"], ensure_ascii=False), _now()),
+             json.dumps(data["mcp_names"], ensure_ascii=False), _now(),
+             json.dumps(data["pinned_topic"], ensure_ascii=False) if data.get("pinned_topic") else None),
         )
         conn.commit()
 
@@ -372,6 +426,8 @@ def compose_client_config() -> dict:
                        "mcp_server_ids": a["mcp_names"], "managed": True}
         if model:
             entry["model"] = model
+        if a.get("pinned_topic"):
+            entry["pinned_topic"] = a["pinned_topic"]
         assistants.append(entry)
 
     if errors:
@@ -558,10 +614,14 @@ def _require_name(data: dict, key: str = "name") -> str:
 
 
 def _validate_upstream(data: dict) -> dict:
-    """校验并归一 upstream：base_url 去尾斜杠；models 补 name/visible 缺省。"""
+    """校验并归一 upstream：base_url 去尾斜杠；models 补 name/visible 缺省。
+
+    weknora 协议的模型可带 agent_id（WeKnora 智能体 UUID，会话创建时绑定）；
+    省略时以模型 id 作为 agent_id。
+    """
     name = _require_name(data)
-    if data.get("protocol") not in ("openai", "ollama"):
-        raise HTTPException(status_code=400, detail="protocol must be 'openai' or 'ollama'")
+    if data.get("protocol") not in ("openai", "ollama", "weknora"):
+        raise HTTPException(status_code=400, detail="protocol must be 'openai', 'ollama' or 'weknora'")
     if not _http_url(data.get("base_url")):
         raise HTTPException(status_code=400, detail="base_url must be an http(s) URL")
     api_key = data.get("api_key") or ""
@@ -580,7 +640,13 @@ def _validate_upstream(data: dict) -> dict:
         visible = m.get("visible", True)
         if not isinstance(visible, bool):
             raise HTTPException(status_code=400, detail="model.visible must be a boolean")
-        norm.append({"id": m["id"], "name": m.get("name") or m["id"], "visible": visible})
+        agent_id = m.get("agent_id") or ""
+        if not isinstance(agent_id, str):
+            raise HTTPException(status_code=400, detail="model.agent_id must be a string")
+        entry = {"id": m["id"], "name": m.get("name") or m["id"], "visible": visible}
+        if agent_id:
+            entry["agent_id"] = agent_id
+        norm.append(entry)
     return {"name": name, "protocol": data["protocol"], "base_url": data["base_url"].rstrip("/"),
             "api_key": api_key, "enabled": enabled, "models": norm}
 
@@ -603,7 +669,23 @@ def _validate_assistant(data: dict) -> dict:
         raise HTTPException(status_code=400, detail="mcp_names must be a list of non-empty strings")
     return {"name": name, "prompt": data.get("prompt") or "", "emoji": data.get("emoji") or "✨",
             "description": data.get("description") or "", "model_ref": model_ref,
-            "settings": assistant_settings, "mcp_names": mcp_names}
+            "settings": assistant_settings, "mcp_names": mcp_names,
+            "pinned_topic": _validate_pinned_topic(data.get("pinned_topic"))}
+
+
+def _validate_pinned_topic(value) -> dict | None:
+    """置顶对话下发配置：{name, welcome?}；name 必填非空，welcome 可省。None/空 清除。"""
+    if value is None or value == {}:
+        return None
+    if not isinstance(value, dict):
+        raise HTTPException(status_code=400, detail="pinned_topic must be an object {name, welcome}")
+    topic_name = value.get("name")
+    if not isinstance(topic_name, str) or not topic_name.strip():
+        raise HTTPException(status_code=400, detail="pinned_topic.name required")
+    welcome = value.get("welcome") or ""
+    if not isinstance(welcome, str):
+        raise HTTPException(status_code=400, detail="pinned_topic.welcome must be a string")
+    return {"name": topic_name.strip(), "welcome": welcome}
 
 
 def _validate_mcp_server(data: dict) -> dict:
@@ -690,12 +772,18 @@ def admin_delete_upstream(uid: str) -> dict:
 
 @router.post("/admin/api/upstreams/{uid}/test", dependencies=[Depends(_require_admin_token)])
 async def admin_test_upstream(uid: str) -> dict:
-    """连通性测试：openai 探 GET {base}/models，ollama 探 GET {base}/api/tags，5s 超时；结果不抛 5xx。"""
+    """连通性测试：openai 探 GET {base}/models，ollama 探 GET {base}/api/tags，
+    weknora 探 GET {base}/api/v1/agents（X-API-Key）；5s 超时；结果不抛 5xx。"""
     up = get_upstream(uid)
     if up is None:
         raise HTTPException(status_code=404, detail=f"upstream not found: {uid}")
-    probe = "/models" if up["protocol"] == "openai" else "/api/tags"
-    headers = {"Authorization": f"Bearer {up['api_key']}"} if up["api_key"] else {}
+    if up["protocol"] == "openai":
+        probe, headers = "/models", _bearer(up)
+    elif up["protocol"] == "weknora":
+        probe = "/api/v1/agents"
+        headers = {"X-API-Key": up["api_key"]} if up["api_key"] else {}
+    else:
+        probe, headers = "/api/tags", _bearer(up)
     t0 = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -704,6 +792,10 @@ async def admin_test_upstream(uid: str) -> dict:
     except httpx.HTTPError as e:
         detail, ok = f"{type(e).__name__}: {e}", False
     return {"ok": ok, "latency_ms": int((time.monotonic() - t0) * 1000), "detail": detail}
+
+
+def _bearer(up: dict) -> dict:
+    return {"Authorization": f"Bearer {up['api_key']}"} if up["api_key"] else {}
 
 
 @router.get("/admin/api/settings", dependencies=[Depends(_require_admin_token)])
@@ -945,7 +1037,7 @@ _ADMIN_HTML = """<!doctype html>
     <div class="grid">
       <label>ID<input id="up-id" placeholder="如 gw，创建后不可改"></label>
       <label>名称<input id="up-name" placeholder="显示名"></label>
-      <label>协议<select id="up-protocol"><option value="openai">openai</option><option value="ollama">ollama</option></select></label>
+      <label>协议<select id="up-protocol"><option value="openai">openai</option><option value="ollama">ollama</option><option value="weknora">weknora</option></select></label>
       <label>base_url<input id="up-base-url" placeholder="http://host:port"></label>
       <label>api_key<input id="up-api-key" type="password" autocomplete="off" placeholder="上游密钥，仅存服务端"></label>
       <label class="check"><input id="up-enabled" type="checkbox" checked>启用</label>
@@ -1004,6 +1096,11 @@ _ADMIN_HTML = """<!doctype html>
     </div>
     <label class="block">描述<input id="a-desc"></label>
     <label class="block">提示词 prompt<textarea id="a-prompt" rows="5"></textarea></label>
+    <h4>置顶对话下发（客户端聊天界面置顶，留空即不下发）</h4>
+    <div class="grid">
+      <label>置顶对话名称<input id="a-pt-name" placeholder="如 问问百事通"></label>
+      <label>欢迎语（首条消息）<input id="a-pt-welcome" placeholder="进入对话时展示的说明文字，可空"></label>
+    </div>
     <h4>MCP 服务（可多选）</h4>
     <div id="a-mcps" class="checks"></div>
     <div class="row">
@@ -1200,11 +1297,13 @@ function modelRow(m) {
   div.className = "model-row";
   div.innerHTML = '<input class="m-id" placeholder="模型 id">'
     + '<input class="m-name" placeholder="显示名（可空）">'
+    + '<input class="m-agent" placeholder="agent_id（仅 weknora，可空）">'
     + '<label class="check"><input type="checkbox" class="m-visible" checked>可见</label>'
     + '<button type="button" data-action="del-row">删除行</button>';
   if (m) {
     div.querySelector(".m-id").value = m.id || "";
     div.querySelector(".m-name").value = m.name || "";
+    div.querySelector(".m-agent").value = m.agent_id || "";
     div.querySelector(".m-visible").checked = m.visible !== false;
   }
   return div;
@@ -1269,6 +1368,7 @@ async function saveUpstream() {
     models: Array.from(document.querySelectorAll("#up-models .model-row")).map((r) => ({
       id: r.querySelector(".m-id").value.trim(),
       name: r.querySelector(".m-name").value.trim(),
+      agent_id: r.querySelector(".m-agent").value.trim(),
       visible: r.querySelector(".m-visible").checked,
     })),
   };
@@ -1344,7 +1444,8 @@ async function saveDefaults() {
 function renderAssistants() {
   const rows = ASSISTANTS.map((a) => {
     const id = esc(a.id);
-    return `<tr><td class="mono">${id}</td><td>${esc(a.emoji)} ${esc(a.name)}</td>
+    const pin = a.pinned_topic ? ` <span title="置顶对话：${esc(a.pinned_topic.name)}">📌</span>` : "";
+    return `<tr><td class="mono">${id}</td><td>${esc(a.emoji)} ${esc(a.name)}${pin}</td>
       <td class="mono">${esc(a.model_ref || "—")}</td>
       <td>${esc((a.mcp_names || []).join("、")) || "—"}</td>
       <td class="ops">
@@ -1366,6 +1467,7 @@ function resetAssistantForm() {
   $("a-form-title").textContent = "新建助手";
   $("a-id").value = ""; $("a-id").disabled = false;
   $("a-name").value = ""; $("a-emoji").value = "✨"; $("a-desc").value = ""; $("a-prompt").value = "";
+  $("a-pt-name").value = ""; $("a-pt-welcome").value = "";
   $("a-model").innerHTML = modelOptions("");
   buildMcpChecks([]);
   $("a-hint").textContent = "ID 留空自动生成；模型与 MCP 可留空。";
@@ -1395,6 +1497,9 @@ function editAssistant(id) {
   $("a-prompt").value = a.prompt || "";
   $("a-model").innerHTML = modelOptions(a.model_ref || "");
   buildMcpChecks(a.mcp_names || []);
+  const pt = a.pinned_topic || {};
+  $("a-pt-name").value = pt.name || "";
+  $("a-pt-welcome").value = pt.welcome || "";
   $("a-hint").textContent = "正在编辑 " + a.id;
   $("assistant-form").scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -1402,6 +1507,7 @@ function editAssistant(id) {
 async function saveAssistant() {
   let aid = $("a-id").value.trim();
   if (!aid) aid = newId();
+  const ptName = $("a-pt-name").value.trim();
   const body = {
     name: $("a-name").value.trim(),
     prompt: $("a-prompt").value,
@@ -1409,6 +1515,7 @@ async function saveAssistant() {
     description: $("a-desc").value,
     model_ref: $("a-model").value,
     mcp_names: Array.from(document.querySelectorAll("#a-mcps input:checked")).map((c) => c.value),
+    pinned_topic: ptName ? { name: ptName, welcome: $("a-pt-welcome").value } : null,
   };
   if (!body.name) return show("助手名称必填", "err");
   await api("PUT", "/admin/api/assistants/" + encodeURIComponent(aid), body);

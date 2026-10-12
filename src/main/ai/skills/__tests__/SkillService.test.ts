@@ -33,6 +33,11 @@ const notifyDataApiDataChangeMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@data/dataApiDataChange', () => ({ notifyDataApiDataChange: notifyDataApiDataChangeMock }))
 
+// gateway install source reads enterprise settings to reach the company gateway.
+vi.mock('@main/enterprise/enterpriseSettings', () => ({
+  loadEnterpriseSettings: () => ({ status: 'enabled' as const, serverUrl: 'http://gw:8787', token: 'client-token' })
+}))
+
 vi.mock('@main/utils/markdownParser', () => ({
   parseSkillMetadata: vi.fn(),
   findAllSkillDirectories: vi.fn().mockResolvedValue([]),
@@ -1571,6 +1576,172 @@ describe('SkillService', () => {
         createTempDirSpy.mockRestore()
         extractZipSpy.mockRestore()
         installSkillDirSpy.mockRestore()
+        vi.mocked(net.fetch).mockReset()
+      }
+    })
+
+    it('installs a skillhub skill straight from the download endpoint and records its source URL', async () => {
+      const skillService = new SkillService()
+      const tempDir = await createTempDir('skill-skillhub-install-')
+      const extractDir = path.join(tempDir, 'demo')
+      await fs.promises.mkdir(extractDir, { recursive: true })
+      const canonicalExtractDir = await fs.promises.realpath(extractDir)
+      const installedSkill = {
+        id: '55555555-5555-5555-8555-555555555555',
+        name: 'Demo',
+        description: 'SkillHub demo',
+        folderName: 'demo',
+        source: 'marketplace',
+        sourceUrl: 'https://skillhub.cn/skills/hub_tester/demo',
+        namespace: null,
+        author: null,
+        sourceTags: [],
+        contentHash: 'hash-demo',
+        isEnabled: false,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      }
+
+      // skillhub has no detail round-trip: the download endpoint serves the bundle zip directly.
+      vi.mocked(net.fetch).mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 200 }))
+      const createTempDirSpy = vi.mocked(skillPaths.createTempDir).mockResolvedValue(tempDir)
+      const extractZipSpy = vi.mocked(skillArchive.extractZip).mockImplementation(async () => {
+        await fs.promises.writeFile(path.join(extractDir, 'SKILL.md'), '---\nname: demo\n---\n')
+      })
+      vi.mocked(findSkillMdPath).mockImplementation(async (directory) => path.join(directory, 'SKILL.md'))
+      vi.mocked(parseSkillMetadata).mockResolvedValueOnce({ name: 'Demo', slug: 'demo' } as never)
+      const installSkillDirSpy = vi
+        .spyOn(skillService as unknown as SkillServicePrivate, 'installSkillDir')
+        .mockResolvedValue(installedSkill)
+
+      try {
+        const result = await skillService.install({ installSource: 'skillhub:hub_tester/demo' })
+
+        expect(result).toBe(installedSkill)
+        expect(net.fetch).toHaveBeenCalledTimes(1)
+        expect(net.fetch).toHaveBeenCalledWith(
+          'https://api.skillhub.cn/api/v1/download?slug=demo&namespace=hub_tester',
+          {
+            headers: { 'User-Agent': 'CherryStudio' }
+          }
+        )
+        expect(createTempDirSpy).toHaveBeenCalledWith('skillhub')
+        expect(installSkillDirSpy).toHaveBeenCalledWith(
+          canonicalExtractDir,
+          'marketplace',
+          'https://skillhub.cn/skills/hub_tester/demo'
+        )
+      } finally {
+        createTempDirSpy.mockRestore()
+        extractZipSpy.mockRestore()
+        installSkillDirSpy.mockRestore()
+        vi.mocked(net.fetch).mockReset()
+      }
+    })
+
+    it('rejects a malformed skillhub install handle before touching the network', async () => {
+      const skillService = new SkillService()
+
+      await expect(skillService.install({ installSource: 'skillhub:hub_tester' })).rejects.toThrow(
+        'Invalid skillhub identifier: hub_tester'
+      )
+      expect(net.fetch).not.toHaveBeenCalled()
+    })
+
+    it('installs a gateway skill by resolving its zip through the plugin manifest', async () => {
+      const skillService = new SkillService()
+      const tempDir = await createTempDir('skill-gateway-install-')
+      const extractDir = path.join(tempDir, 'docx-manipulation')
+      await fs.promises.mkdir(extractDir, { recursive: true })
+      const canonicalExtractDir = await fs.promises.realpath(extractDir)
+      const installedSkill = {
+        id: '66666666-6666-6666-8666-666666666666',
+        name: 'docx-manipulation',
+        description: 'Word skill',
+        folderName: 'docx-manipulation',
+        source: 'marketplace',
+        sourceUrl: 'http://gw:8787/marketplace/api/plugins/office-suite/files/payload/docx-manipulation.zip',
+        namespace: null,
+        author: null,
+        sourceTags: [],
+        contentHash: 'hash-docx',
+        isEnabled: false,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      }
+
+      // First fetch resolves the skill's zip path from the pack manifest; second fetch is the zip.
+      vi.mocked(net.fetch)
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              id: 'office-suite',
+              skills: [{ name: 'docx-manipulation', zip: 'payload/docx-manipulation.zip' }]
+            }),
+            { headers: { 'Content-Type': 'application/json' }, status: 200 }
+          )
+        )
+        .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 200 }))
+      const createTempDirSpy = vi.mocked(skillPaths.createTempDir).mockResolvedValue(tempDir)
+      const extractZipSpy = vi.mocked(skillArchive.extractZip).mockImplementation(async () => {
+        await fs.promises.writeFile(path.join(extractDir, 'SKILL.md'), '---\nname: docx-manipulation\n---\n')
+      })
+      vi.mocked(findSkillMdPath).mockImplementation(async (directory) => path.join(directory, 'SKILL.md'))
+      vi.mocked(parseSkillMetadata).mockResolvedValueOnce({
+        name: 'docx-manipulation',
+        slug: 'docx-manipulation'
+      } as never)
+      const installSkillDirSpy = vi
+        .spyOn(skillService as unknown as SkillServicePrivate, 'installSkillDir')
+        .mockResolvedValue(installedSkill)
+
+      try {
+        const result = await skillService.install({ installSource: 'gateway:office-suite/docx-manipulation' })
+
+        expect(result).toBe(installedSkill)
+        expect(net.fetch).toHaveBeenNthCalledWith(1, 'http://gw:8787/marketplace/api/plugins/office-suite', {
+          headers: { 'X-Client-Token': 'client-token' },
+          redirect: 'follow',
+          signal: expect.any(AbortSignal)
+        })
+        expect(net.fetch).toHaveBeenNthCalledWith(
+          2,
+          'http://gw:8787/marketplace/api/plugins/office-suite/files/payload/docx-manipulation.zip',
+          {
+            headers: { 'X-Client-Token': 'client-token' },
+            redirect: 'follow',
+            signal: expect.any(AbortSignal)
+          }
+        )
+        expect(createTempDirSpy).toHaveBeenCalledWith('gateway')
+        expect(installSkillDirSpy).toHaveBeenCalledWith(
+          canonicalExtractDir,
+          'marketplace',
+          'http://gw:8787/marketplace/api/plugins/office-suite/files/payload/docx-manipulation.zip'
+        )
+      } finally {
+        createTempDirSpy.mockRestore()
+        extractZipSpy.mockRestore()
+        installSkillDirSpy.mockRestore()
+        vi.mocked(net.fetch).mockReset()
+      }
+    })
+
+    it('rejects a gateway handle naming a skill the plugin does not publish', async () => {
+      const skillService = new SkillService()
+      vi.mocked(net.fetch).mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'office-suite', skills: [] }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200
+        })
+      )
+
+      try {
+        await expect(skillService.install({ installSource: 'gateway:office-suite/unknown-skill' })).rejects.toThrow(
+          'does not publish a skill named "unknown-skill"'
+        )
+        expect(net.fetch).toHaveBeenCalledTimes(1)
+      } finally {
         vi.mocked(net.fetch).mockReset()
       }
     })

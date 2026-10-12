@@ -1,6 +1,8 @@
 import { loggerService } from '@logger'
 import type { SkillSearchResult } from '@shared/types/skill'
 import {
+  normalizeSkillhub,
+  normalizeSkillhubShowcase,
   searchSkillMarketplaces,
   SKILL_SEARCH_FAILED_ERROR as SHARED_SKILL_SEARCH_FAILED_ERROR
 } from '@shared/utils/skillMarketplace'
@@ -35,7 +37,7 @@ async function fetchJson(url: string): Promise<unknown> {
 // ===========================================================================
 
 /**
- * Search all 3 skill registries.
+ * Search all 4 skill registries.
  * Preserves partial success, but rejects when every source fails.
  */
 export async function searchSkills(query: string): Promise<SkillSearchResult[]> {
@@ -44,4 +46,29 @@ export async function searchSkills(query: string): Promise<SkillSearchResult[]> 
       error: error instanceof Error ? error.message : String(error)
     })
   })
+}
+
+// ===========================================================================
+// skillhub.cn direct endpoints (showcase rankings + single-source search)
+// ===========================================================================
+
+export type SkillhubShowcaseSection = 'hot' | 'featured' | 'newest' | 'recommended'
+
+/**
+ * skillhub.cn showcase ranking, normalized to the shared search result shape.
+ * Separate from `searchSkills`: the market page renders these lists directly as
+ * SkillHub-branded sections instead of mixing every registry together.
+ */
+export async function fetchSkillhubShowcase(section: SkillhubShowcaseSection): Promise<SkillSearchResult[]> {
+  const json = await fetchJson(`https://api.skillhub.cn/api/v1/showcase/${section}`)
+  return normalizeSkillhubShowcase(json)
+}
+
+/** skillhub.cn-only search, for the market page's skills tab search box. */
+export async function searchSkillhub(query: string): Promise<SkillSearchResult[]> {
+  const url = new URL('https://api.skillhub.cn/api/v1/search')
+  url.searchParams.set('q', query.trim())
+  url.searchParams.set('page_size', '20')
+  const json = await fetchJson(url.toString())
+  return normalizeSkillhub(json)
 }

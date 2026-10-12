@@ -35,7 +35,7 @@ describe('DefaultPreferences', () => {
 
   it('groups conversations and agent sessions by the assistant and agent defaults for new users', () => {
     const topicDisplayDefault: PreferenceSchemas['default']['topic.tab.display_mode'] = 'assistant'
-    const agentSessionDisplayDefault: PreferenceSchemas['default']['agent.session.display_mode'] = 'agent'
+    const agentSessionDisplayDefault: PreferenceSchemas['default']['agent.session.display_mode'] = 'workdir'
 
     expect(DefaultPreferences.default['topic.tab.display_mode']).toBe(topicDisplayDefault)
     expect(DefaultPreferences.default['agent.session.display_mode']).toBe(agentSessionDisplayDefault)

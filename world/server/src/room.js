@@ -1,5 +1,17 @@
-// 房间层：会话管理、在场名单合并（WS 在场 + 心跳在线）、批量位置广播、聊天转发
-import { CAPACITY, BROADCAST_INTERVAL_MS, HEARTBEAT_WINDOW_MS, NEAR_RADIUS, MAX_CHAT_LEN, SPAWN } from './config.js'
+// 房间层（v2）：场景会话管理、players 全量广播、三通道聊天（near/all/room）、
+// 小房子进出（≤6 人/间）、表情转发。心跳在线者不再进 players（坐班小人已废弃），
+// 仅作 /api/health 的 clients 统计。
+import {
+  CAPACITY,
+  BROADCAST_INTERVAL_MS,
+  HEARTBEAT_WINDOW_MS,
+  NEAR_RADIUS,
+  MAX_CHAT_LEN,
+  MAX_EMOTE_LEN,
+  HOUSE_IDS,
+  HOUSE_CAPACITY,
+  SPAWN
+} from './config.js'
 
 const WS_OPEN = 1
 
@@ -15,6 +27,7 @@ export class Room {
     broadcastIntervalMs = BROADCAST_INTERVAL_MS,
     heartbeatWindowMs = HEARTBEAT_WINDOW_MS,
     nearRadius = NEAR_RADIUS,
+    houseCapacity = HOUSE_CAPACITY,
     log = () => {}
   } = {}) {
     this.store = store
@@ -22,8 +35,9 @@ export class Room {
     this.broadcastIntervalMs = broadcastIntervalMs
     this.heartbeatWindowMs = heartbeatWindowMs
     this.nearRadius = nearRadius
+    this.houseCapacity = houseCapacity
     this.log = log
-    /** @type {Map<number, {id:number, ws:{send:Function,readyState:number}, cid:string, pos:object|null, joined:boolean}>} */
+    /** @type {Map<number, {id:number, ws:{send:Function,readyState:number}, cid:string, pos:object|null, houseId:string|null, joined:boolean}>} */
     this.sessions = new Map()
     this.nextSessionId = 1
     this.timer = null
@@ -38,7 +52,7 @@ export class Room {
   }
 
   addSession(ws, cid) {
-    const session = { id: this.nextSessionId++, ws, cid, pos: null, joined: false }
+    const session = { id: this.nextSessionId++, ws, cid, pos: null, houseId: null, joined: false }
     this.sessions.set(session.id, session)
     this.log(`join-ws cid=${cid} count=${this.sessions.size}`)
     return session
@@ -68,9 +82,11 @@ export class Room {
       type: 'init',
       self: {
         cid: session.cid,
-        nickname: displayNameFor(session.cid, profile),
+        // 无档案 → 空昵称，前端据此弹出身份填写框（shared-contract §1）
+        nickname: profile?.nickname ?? '',
         dept: profile?.dept ?? null,
-        scene: true
+        color: profile?.color ?? null,
+        houseId: null
       },
       players,
       world: { spawn: { ...SPAWN } }
@@ -86,20 +102,71 @@ export class Room {
     return true
   }
 
-  /** 客户端 {type:'chat', scope:'near'|'all', text≤500} → 转发 {type:'chat', from:{cid,name}, scope, text}（含发送者自身回显） */
+  /**
+   * 客户端 {type:'house', id:'h1'|null}：进入/离开小房子。
+   * 成功 → 对请求者回 {type:'house_ok', id}；满员（同房子会话数 ≥ houseCapacity）→
+   * 仅对请求者回 {type:'house_full', id}，不改变成员关系。
+   */
+  handleHouse(session, msg) {
+    const id = msg?.id
+    if (id === null) {
+      if (session.houseId === null) return false
+      session.houseId = null
+      this.log(`house-leave cid=${session.cid}`)
+      this.send(session, { type: 'house_ok', id: null })
+      this.broadcastPlayers()
+      return true
+    }
+    if (typeof id !== 'string' || !HOUSE_IDS.includes(id)) return false
+    if (session.houseId === id) return true
+    const inHouse = [...this.sessions.values()].filter((s) => s.houseId === id).length
+    if (inHouse >= this.houseCapacity) {
+      this.log(`house-full cid=${session.cid} house=${id}`)
+      this.send(session, { type: 'house_full', id })
+      return false
+    }
+    session.houseId = id
+    this.log(`house-join cid=${session.cid} house=${id}`)
+    this.send(session, { type: 'house_ok', id })
+    this.broadcastPlayers()
+    return true
+  }
+
+  /**
+   * 客户端 {type:'chat', scope:'near'|'all'|'room', text≤500} →
+   * 转发 {type:'chat', from:{cid,name}, scope, text}（含发送者自身回显）。
+   * near=8m 半径；all=全员；room=同房子会话（发送者须在房内）。
+   */
   handleChat(session, msg) {
     const scope = msg?.scope
     const text = msg?.text
-    if (scope !== 'near' && scope !== 'all') return false
+    if (scope !== 'near' && scope !== 'all' && scope !== 'room') return false
     if (typeof text !== 'string' || text.length === 0 || text.length > MAX_CHAT_LEN) return false
+    if (scope === 'room' && session.houseId === null) return false
     const payload = {
       type: 'chat',
       from: { cid: session.cid, name: displayNameFor(session.cid, this.store.getProfile(session.cid)) },
       scope,
       text
     }
-    const targets = scope === 'all' ? this.sessions.values() : this.nearTargets(session)
+    let targets
+    if (scope === 'all') targets = this.sessions.values()
+    else if (scope === 'room') targets = this.sessions.values().filter((s) => s.houseId === session.houseId)
+    else targets = this.nearTargets(session)
     for (const target of targets) this.send(target, payload)
+    return true
+  }
+
+  /** 客户端 {type:'emote', emoji} → 8m 内转发 {type:'emote', from, emoji}（含发送者回显） */
+  handleEmote(session, msg) {
+    const emoji = msg?.emoji
+    if (typeof emoji !== 'string' || emoji.length === 0 || emoji.length > MAX_EMOTE_LEN) return false
+    const payload = {
+      type: 'emote',
+      from: { cid: session.cid, name: displayNameFor(session.cid, this.store.getProfile(session.cid)) },
+      emoji
+    }
+    for (const target of this.nearTargets(session)) this.send(target, payload)
     return true
   }
 
@@ -117,7 +184,7 @@ export class Room {
     return targets
   }
 
-  /** WS 会话玩家条目（scene=true，含位置） */
+  /** 场景内玩家条目（v2：players 仅含打开页面的会话；坐班小人已废弃） */
   wsPlayerEntry(session) {
     const profile = this.store.getProfile(session.cid)
     const pos = session.pos ?? { x: SPAWN.x, z: SPAWN.z, ry: 0, anim: 'idle' }
@@ -125,7 +192,8 @@ export class Room {
       cid: session.cid,
       name: displayNameFor(session.cid, profile),
       dept: profile?.dept ?? null,
-      scene: true,
+      color: profile?.color ?? null,
+      houseId: session.houseId,
       x: pos.x,
       z: pos.z,
       ry: pos.ry,
@@ -133,32 +201,9 @@ export class Room {
     }
   }
 
-  /** 心跳在线（不在场景）玩家条目：坐班工位小人 */
-  seatedEntry(cid) {
-    const profile = this.store.getProfile(cid)
-    return {
-      cid,
-      name: displayNameFor(cid, profile),
-      dept: profile?.dept ?? null,
-      scene: false
-    }
-  }
-
-  /**
-   * 在场名单合并（D8）：WS 会话（scene=true）∪ 心跳 90s 内在线者（scene=false）。
-   * 重复 cid 以 WS 会话优先（同一客户端开着 webview 时主进程也在心跳）。
-   */
   buildPlayers() {
     const players = []
-    const wsCids = new Set()
-    for (const s of this.sessions.values()) {
-      wsCids.add(s.cid)
-      players.push(this.wsPlayerEntry(s))
-    }
-    for (const cid of this.store.heartbeatAliveCids(this.heartbeatWindowMs)) {
-      if (wsCids.has(cid)) continue
-      players.push(this.seatedEntry(cid))
-    }
+    for (const s of this.sessions.values()) players.push(this.wsPlayerEntry(s))
     return players
   }
 
@@ -189,11 +234,13 @@ export class Room {
     this.timer = null
   }
 
-  /** health 指标：online = 在线名单去重 cid 数（WS ∪ 心跳），inScene = 活跃 WS 会话数 */
+  /**
+   * health 指标（v2 语义）：
+   * online = 场景内人数（打开页面 = 活跃 WS 会话，即对外公示的"在线人数"）
+   * clients = 心跳客户端数（装了客户端但未必打开页面，仅管理端统计用）
+   */
   counts() {
-    const cids = new Set(this.store.heartbeatAliveCids(this.heartbeatWindowMs))
-    for (const s of this.sessions.values()) cids.add(s.cid)
-    return { online: cids.size, inScene: this.sessions.size }
+    return { online: this.sessions.size, clients: this.store.heartbeatAliveCids(this.heartbeatWindowMs).length }
   }
 }
 

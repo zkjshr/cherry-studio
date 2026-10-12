@@ -1,9 +1,13 @@
 """模型路由代理：/v1/chat/completions 按 model="{upstream_id}/{model_id}"（首个 "/" 分隔，
 model_id 本身可含 "/"）路由到注册上游。openai 协议原样透传（SSE 流式 / JSON）；ollama 协议
 把 /api/chat 的 NDJSON 转为 OpenAI chunk 流（复用 chat.extract_ollama_delta），非 stream 聚合
-为一份 completion。未知模型/上游返回 OpenAI 错误格式 404。每次调用（含上游错误与路由失败）
-写一条 usage_log。RAG 编排在 openai_compat 的 /v1/kb/chat/completions，不走本模块。
+为一份 completion；weknora 协议把 WeKnora 智能体会话（/api/v1/agent-chat，SSE event:message
+帧）转为 OpenAI chunk 流（thinking→reasoning_content、answer→content），会话按对话指纹懒建并
+在 weknora_sessions 表中映射，服务端 404 时自动重建重试一次。未知模型/上游返回 OpenAI 错误
+格式 404。每次调用（含上游错误与路由失败）写一条 usage_log。RAG 编排在 openai_compat 的
+/v1/kb/chat/completions，不走本模块。
 """
+import hashlib
 import json
 import time
 import uuid
@@ -13,8 +17,14 @@ from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from gateway.auth import require_token
-from gateway.chat import extract_ollama_delta
-from gateway.enterprise import list_upstreams, record_usage
+from gateway.chat import extract_ollama_parts
+from gateway.enterprise import (
+    delete_weknora_session,
+    get_weknora_session,
+    list_upstreams,
+    record_usage,
+    save_weknora_session
+)
 
 router = APIRouter()
 
@@ -178,6 +188,9 @@ async def _proxy_ollama(upstream: dict, model_id: str, model: str, body: dict, t
         "model": model_id,
         "messages": _flatten_text_content(body.get("messages") or []),
         "stream": bool(body.get("stream")),
+        # 显式开启思考：qwen3.5 等推理模型把过程放进 message.thinking，
+        # 不开启时可能内联 <think> 进正文。不支持思考的模型会忽略该参数。
+        "think": True,
     }
     compl_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
 
@@ -196,12 +209,15 @@ async def _proxy_ollama(upstream: dict, model_id: str, model: str, body: dict, t
             first = True
             try:
                 async for line in resp.aiter_lines():
-                    delta = extract_ollama_delta(line)
-                    if delta:
+                    parts = extract_ollama_parts(line)
+                    if parts:
                         if first:
                             first = False
                             yield _chunk(compl_id, model, {"role": "assistant", "content": ""})
-                        yield _chunk(compl_id, model, {"content": delta})
+                        if "thinking" in parts:
+                            yield _chunk(compl_id, model, {"reasoning_content": parts["thinking"]})
+                        if "content" in parts:
+                            yield _chunk(compl_id, model, {"content": parts["content"]})
                         continue
                     try:
                         d = json.loads(line)
@@ -243,11 +259,190 @@ async def _proxy_ollama(upstream: dict, model_id: str, model: str, body: dict, t
         "model": model,
         "choices": [{
             "index": 0,
-            "message": {"role": "assistant", "content": (d.get("message") or {}).get("content") or ""},
+            "message": {
+                "role": "assistant",
+                "content": (d.get("message") or {}).get("content") or "",
+                **({"reasoning_content": d["message"]["thinking"]}
+                   if (d.get("message") or {}).get("thinking") else {}),
+            },
             "finish_reason": "stop",
         }],
         "usage": usage,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WeKnora 协议（智能体会话代理）
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _weknora_headers(upstream: dict) -> dict:
+    """WeKnora 开放 API 用 X-API-Key（Bearer 仅用户 token，API key 会 401）。"""
+    return {"X-API-Key": upstream["api_key"]} if upstream["api_key"] else {}
+
+
+def _weknora_agent_id(upstream: dict, model_id: str) -> str:
+    """模型条目显式 agent_id 优先；缺省以模型 id 充当智能体 id。"""
+    for m in upstream["models"]:
+        if m["id"] == model_id:
+            return m.get("agent_id") or model_id
+    return model_id
+
+
+def _message_text(m: dict) -> str:
+    content = m.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n\n".join(p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text")
+    return ""
+
+
+def _weknora_query_and_key(messages: list[dict]) -> tuple[str, str]:
+    """query=最后一条 user 消息；对话指纹=首条 user 消息哈希。
+
+    WeKnora 会话在服务端持有历史，网关每轮只发增量 query；指纹让同一客户端话题跨轮次
+    复用同一 WeKnora 会话。指纹漂移（首条消息被编辑/删除）仅意味着开新会话，可接受。
+    """
+    query, first_user = "", ""
+    for m in messages:
+        if m.get("role") == "user":
+            text = _message_text(m).strip()
+            if not text:
+                continue
+            if not first_user:
+                first_user = text
+            query = text
+    seed = first_user or query
+    conv_key = hashlib.sha1(seed[:512].encode("utf-8", "ignore")).hexdigest()[:24]
+    return query, conv_key
+
+
+def _weknora_data(line: str) -> dict | None:
+    """WeKnora SSE `data:{json}` 帧 → dict；event:/空行/坏帧返回 None。"""
+    if not line.startswith("data:"):
+        return None
+    try:
+        d = json.loads(line[5:])
+    except ValueError:
+        return None
+    return d if isinstance(d, dict) else None
+
+
+async def _weknora_create_session(client: httpx.AsyncClient, upstream: dict, agent_id: str) -> str:
+    resp = await client.post(f"{upstream['base_url']}/api/v1/sessions",
+                             json={"agent_id": agent_id}, headers=_weknora_headers(upstream))
+    resp.raise_for_status()
+    return resp.json()["data"]["id"]
+
+
+async def _proxy_weknora(upstream: dict, model_id: str, model: str, body: dict, t0: float):
+    """weknora 协议：会话懒建+映射，POST {base}/api/v1/agent-chat/{sid} {"query"}。
+
+    SSE event:message 帧按 response_type 转译：thinking→reasoning_content、answer→content，
+    agent_query/session_title/complete 等忽略。会话在 WeKnora 侧失效（404）时重建重试一次。
+    WeKnora 不回 token 计数，usage 记 0（duration/status 照记）。
+    """
+    messages = _flatten_text_content(body.get("messages") or [])
+    query, conv_key = _weknora_query_and_key(messages)
+    if not query:
+        return _error(400, "weknora upstream requires at least one non-empty user message")
+    agent_id = _weknora_agent_id(upstream, model_id)
+    compl_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+
+    # client 手动管理生命周期：流式生成器在函数返回后才消费 resp，不能挂在 async with 上
+    # （否则返回即关池，生成器首读就是 ReadError——与 _send_stream 路径同一约束）
+    client = httpx.AsyncClient(timeout=UPSTREAM_TIMEOUT)
+    try:
+        mapping = get_weknora_session(conv_key)
+        if mapping is None or mapping["agent_id"] != agent_id:
+            session_id = await _weknora_create_session(client, upstream, agent_id)
+            save_weknora_session(conv_key, session_id, agent_id)
+        else:
+            session_id = mapping["session_id"]
+
+        def chat_request(sid: str):
+            return client.build_request(
+                "POST", f"{upstream['base_url']}/api/v1/agent-chat/{sid}",
+                json={"query": query}, headers=_weknora_headers(upstream))
+
+        resp = await client.send(chat_request(session_id), stream=True)
+        if resp.status_code == 404:
+            # 映射指向的会话已被服务端删除：清映射、重建、重试一次
+            await resp.aclose()
+            delete_weknora_session(conv_key)
+            session_id = await _weknora_create_session(client, upstream, agent_id)
+            save_weknora_session(conv_key, session_id, agent_id)
+            resp = await client.send(chat_request(session_id), stream=True)
+
+        if resp.status_code >= 400:
+            await resp.aread()
+            out = _passthrough(resp)
+            await resp.aclose()
+            await client.aclose()
+            _record(model, upstream["id"], t0, None, "error")
+            return out
+
+        if not body.get("stream"):
+            await resp.aread()
+            try:
+                text = resp.text
+            finally:
+                await resp.aclose()
+                await client.aclose()
+            content, reasoning = "", ""
+            for line in text.splitlines():
+                d = _weknora_data(line)
+                if d is None:
+                    continue
+                rt = d.get("response_type")
+                if rt == "answer":
+                    content += d.get("content") or ""
+                elif rt == "thinking":
+                    reasoning += d.get("content") or ""
+            _record(model, upstream["id"], t0, None, "ok")
+            message: dict = {"role": "assistant", "content": content}
+            if reasoning:
+                message["reasoning_content"] = reasoning
+            return {
+                "id": compl_id,
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": model,
+                "choices": [{"index": 0, "message": message, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            }
+    except BaseException:
+        await client.aclose()
+        raise
+
+    async def gen():
+        ok = True
+        try:
+            yield _chunk(compl_id, model, {"role": "assistant", "content": ""})
+            async for line in resp.aiter_lines():
+                d = _weknora_data(line)
+                if d is None:
+                    continue
+                rt = d.get("response_type")
+                if rt == "thinking":
+                    yield _chunk(compl_id, model, {"reasoning_content": d.get("content") or ""})
+                elif rt == "answer":
+                    yield _chunk(compl_id, model, {"content": d.get("content") or ""})
+        except httpx.HTTPError:
+            ok = False
+            raise
+        except BaseException:  # 客户端断流等非 HTTP 异常同样按失败记账
+            ok = False
+            raise
+        finally:
+            await resp.aclose()
+            await client.aclose()
+            _record(model, upstream["id"], t0, None, "ok" if ok else "error")
+        yield _chunk(compl_id, model, {}, "stop")
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.post("/v1/chat/completions")
@@ -262,6 +457,8 @@ async def chat_completions(body: dict, _token: None = Depends(require_token)):
     try:
         if upstream["protocol"] == "ollama":
             return await _proxy_ollama(upstream, model_id, model, body, t0)
+        if upstream["protocol"] == "weknora":
+            return await _proxy_weknora(upstream, model_id, model, body, t0)
         return await _proxy_openai(upstream, model_id, model, body, t0)
     except httpx.HTTPError as e:
         _record(model, upstream["id"], t0, None, "error")

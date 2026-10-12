@@ -49,7 +49,7 @@ test('init.players 只含其他玩家（不含自己）', async (t) => {
   assert.equal(b.init.players.length, 1)
   assert.equal(b.init.players[0].cid, 'aaa')
   assert.equal(b.init.self.cid, 'bbb')
-  assert.deepEqual(b.init.world.spawn, { x: 0, z: 0 })
+  assert.deepEqual(b.init.world.spawn, { x: 0, z: 26 })
 
   a.ws.close()
   b.ws.close()
