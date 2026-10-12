@@ -26,6 +26,7 @@ function RoutedKnowledgePage() {
 
 const mockUseKnowledgeBases = vi.fn()
 const mockUseKnowledgeGroups = vi.fn()
+const mockUseSharedKnowledgeBases = vi.fn()
 const mockUseCreateKnowledgeGroup = vi.fn()
 const mockUseCreateKnowledgeBase = vi.fn()
 const mockUseRestoreKnowledgeBase = vi.fn()
@@ -77,6 +78,13 @@ vi.mock('../hooks/useKnowledgeGroups', () => ({
   useUpdateKnowledgeGroup: () => mockUseUpdateKnowledgeGroup(),
   useDeleteKnowledgeGroup: () => mockUseDeleteKnowledgeGroup()
 }))
+
+vi.mock('../hooks/useSharedKnowledgeBases', () => ({
+  useSharedKnowledgeBases: () => mockUseSharedKnowledgeBases()
+}))
+
+// 共享库详情"去对话检索"经 useTabs().openTab 打开工作台页签；页面测试无 TabsProvider，mock 掉。
+vi.mock('@renderer/hooks/tab', () => ({ useTabs: () => ({ openTab: vi.fn() }) }))
 
 vi.mock('@renderer/components/Navbar', () => ({
   Navbar: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -161,6 +169,9 @@ vi.mock('../components/navigator', () => ({
     onRenameGroup,
     onDeleteGroup,
     onDeleteBase,
+    sharedKbs,
+    selectedSharedKbId,
+    onSelectSharedKb,
     onResizeStart
   }: {
     bases: Array<{ id: string; name: string }>
@@ -175,6 +186,9 @@ vi.mock('../components/navigator', () => ({
     onRenameGroup: (group: { id: string; name: string }) => void
     onDeleteGroup: (groupId: string) => Promise<void> | void
     onDeleteBase: (baseId: string) => Promise<void> | void
+    sharedKbs: Array<{ id: string; name: string; scope: 'dept' | 'public' }>
+    selectedSharedKbId: string | null
+    onSelectSharedKb: (kbId: string) => void
     onResizeStart: (event: ReactMouseEvent<HTMLButtonElement>) => void
   }) => (
     <div data-testid="base-navigator">
@@ -223,6 +237,35 @@ vi.mock('../components/navigator', () => ({
           </button>
         </div>
       ))}
+      {/* 部门/公共分区（只读网关目录）：与真实导航一样固定渲染分区头，行点击走 onSelectSharedKb */}
+      <div data-testid="shared-dept-section">
+        <div>部门知识库</div>
+        {sharedKbs
+          .filter((kb) => kb.scope === 'dept')
+          .map((kb) => (
+            <button
+              key={kb.id}
+              type="button"
+              data-selected={kb.id === selectedSharedKbId}
+              onClick={() => onSelectSharedKb(kb.id)}>
+              {kb.name}
+            </button>
+          ))}
+      </div>
+      <div data-testid="shared-public-section">
+        <div>公共知识库</div>
+        {sharedKbs
+          .filter((kb) => kb.scope === 'public')
+          .map((kb) => (
+            <button
+              key={kb.id}
+              type="button"
+              data-selected={kb.id === selectedSharedKbId}
+              onClick={() => onSelectSharedKb(kb.id)}>
+              {kb.name}
+            </button>
+          ))}
+      </div>
     </div>
   )
 }))
@@ -583,6 +626,10 @@ vi.mock('react-i18next', () => ({
           'knowledge.empty_action': '创建知识库',
           'knowledge.empty_description': '与 AI 一起积累知识',
           'knowledge.groups.error.failed_to_delete': '分组删除失败',
+          'knowledge.scope.department': '部门知识库',
+          'knowledge.shared.description.department':
+            '这是所里 WeKnora 的部门共享知识库，内容由部门维护；可在对话中直接检索本库内容。',
+          'knowledge.shared.open_chat': '去对话检索',
           'knowledge.title': '知识库'
         }) as Record<string, string>
       )[key] ?? key
@@ -673,6 +720,10 @@ describe('KnowledgePage', () => {
       isLoading: false,
       error: undefined,
       refetch: vi.fn()
+    })
+    mockUseSharedKnowledgeBases.mockReturnValue({
+      payload: { kbs: [], chatTopicId: null },
+      isLoading: false
     })
     mockUseUpdateKnowledgeBase.mockReturnValue({
       updateBase: vi.fn(),
@@ -1393,6 +1444,101 @@ describe('KnowledgePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '创建知识库' }))
 
     expect(await screen.findByTestId('create-dialog')).toBeInTheDocument()
+  })
+
+  it('still renders the navigator when only shared kbs exist', async () => {
+    mockUseKnowledgeBases.mockReturnValue({
+      bases: [],
+      isLoading: false,
+      error: undefined,
+      refetch: vi.fn()
+    })
+    mockUseSharedKnowledgeBases.mockReturnValue({
+      payload: { kbs: [{ id: 'k1', name: '101-结构所规范库', scope: 'dept' }], chatTopicId: null },
+      isLoading: false
+    })
+
+    render(<RoutedKnowledgePage />)
+
+    // 有共享库就不进全屏空态：三分区导航仍然可用
+    expect(await screen.findByText('部门知识库')).toBeInTheDocument()
+    expect(screen.queryByText('暂无知识库')).not.toBeInTheDocument()
+    expect(screen.getByTestId('base-navigator')).toBeInTheDocument()
+  })
+
+  it('renders the shared detail panel when a shared kb is selected', async () => {
+    mockUseKnowledgeBases.mockReturnValue({
+      bases: [],
+      isLoading: false,
+      error: undefined,
+      refetch: vi.fn()
+    })
+    mockUseSharedKnowledgeBases.mockReturnValue({
+      payload: { kbs: [{ id: 'k1', name: '101-结构所规范库', scope: 'dept' }], chatTopicId: 'topic-9' },
+      isLoading: false
+    })
+
+    render(<RoutedKnowledgePage />)
+
+    fireEvent.click(await screen.findByText('101-结构所规范库'))
+
+    // 详情区分流到共享库只读面板；本地详情头不渲染
+    expect(
+      await screen.findByText('这是所里 WeKnora 的部门共享知识库，内容由部门维护；可在对话中直接检索本库内容。')
+    ).toBeInTheDocument()
+    expect(screen.queryByTestId('detail-header')).not.toBeInTheDocument()
+  })
+
+  it('clears a stale shared-kb selection when the shared directory degrades to empty', async () => {
+    mockUseKnowledgeBases.mockReturnValue({
+      bases: [createKnowledgeBase({ id: 'base-1', name: 'Base 1' })],
+      isLoading: false,
+      error: undefined,
+      refetch: vi.fn()
+    })
+    mockUseSharedKnowledgeBases.mockReturnValue({
+      payload: { kbs: [{ id: 'k1', name: '101-结构所规范库', scope: 'dept' }], chatTopicId: null },
+      isLoading: false
+    })
+
+    const { rerender } = render(<RoutedKnowledgePage />)
+
+    fireEvent.click(await screen.findByText('101-结构所规范库'))
+    expect(
+      await screen.findByText('这是所里 WeKnora 的部门共享知识库，内容由部门维护；可在对话中直接检索本库内容。')
+    ).toBeInTheDocument()
+
+    // 网关降级为空目录：选中项不再解析，选中态必须被清理，自动选中才能恢复接管，
+    // 否则详情区永远停在加载占位。
+    mockUseSharedKnowledgeBases.mockReturnValue({
+      payload: { kbs: [], chatTopicId: null },
+      isLoading: false
+    })
+    rerender(<RoutedKnowledgePage />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('detail-header')).toHaveTextContent('Base 1')
+    })
+    expect(screen.queryByText('加载中...')).not.toBeInTheDocument()
+  })
+
+  it('stays out of the full-screen empty state while the shared directory is loading', async () => {
+    mockUseKnowledgeBases.mockReturnValue({
+      bases: [],
+      isLoading: false,
+      error: undefined,
+      refetch: vi.fn()
+    })
+    mockUseSharedKnowledgeBases.mockReturnValue({
+      payload: { kbs: [], chatTopicId: null },
+      isLoading: true
+    })
+
+    render(<RoutedKnowledgePage />)
+
+    // 共享目录（网关最长 15s）仍在加载：零个人库的企业用户不能被推进"创建第一个库"空态
+    expect(screen.queryByText('暂无知识库')).not.toBeInTheDocument()
+    expect(screen.getByTestId('base-navigator')).toBeInTheDocument()
   })
 
   it('opens the create-group dialog and wires submission to the group mutation hook', async () => {

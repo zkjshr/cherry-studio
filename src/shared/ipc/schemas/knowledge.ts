@@ -11,7 +11,8 @@ import {
   KnowledgeItemChunkSchema,
   KnowledgeSearchResultSchema,
   RestoreKnowledgeBaseResultSchema,
-  RestoreKnowledgeBaseSchema
+  RestoreKnowledgeBaseSchema,
+  SharedKnowledgeBasesPayloadSchema
 } from '@shared/data/types/knowledge'
 import { AbsoluteFilePathSchema } from '@shared/types/file'
 
@@ -85,5 +86,7 @@ export const knowledgeRequestSchemas = {
   'knowledge.list_item_chunks': defineRoute({
     input: z.strictObject({ baseId: baseIdSchema, itemId: z.string().trim().min(1) }),
     output: z.array(KnowledgeItemChunkSchema)
-  })
+  }),
+  // 企业共享知识库目录（WeKnora 部门/公共库）+ 置顶知识话题 id，客户端只读。
+  'knowledge.list_shared_kbs': defineRoute({ input: z.void(), output: SharedKnowledgeBasesPayloadSchema })
 }

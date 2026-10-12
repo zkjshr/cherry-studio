@@ -23,7 +23,7 @@ import { toast } from '@renderer/services/toast'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { KnowledgeBaseListItem } from '@shared/data/api/schemas/knowledges'
 import type { Group } from '@shared/data/types/group'
-import type { KnowledgeBase, KnowledgeItemType } from '@shared/data/types/knowledge'
+import type { KnowledgeBase, KnowledgeItemType, SharedKnowledgeBase } from '@shared/data/types/knowledge'
 
 import {
   useCreateKnowledgeGroup,
@@ -31,6 +31,7 @@ import {
   useKnowledgeGroups,
   useUpdateKnowledgeGroup
 } from './hooks/useKnowledgeGroups'
+import { useSharedKnowledgeBases } from './hooks/useSharedKnowledgeBases'
 import type { KnowledgeRestoreBaseInitialValues } from './panels/ragConfig/RagConfigPanel'
 import type { KnowledgeFilePreviewTarget, KnowledgeTabKey } from './types'
 
@@ -43,6 +44,15 @@ interface KnowledgePageContextValue {
   bases: KnowledgeBaseListItem[]
   groups: Group[]
   isLoading: boolean
+  /** 共享库目录（网关）是否仍在加载——全屏空态必须等它结束，避免企业用户误入"创建第一个库"。 */
+  isSharedKbsLoading: boolean
+  /** 企业共享知识库只读目录（部门/公共），来自网关，客户端不可增删改。 */
+  sharedKbs: SharedKnowledgeBase[]
+  /** 第一个有置顶话题的受管助手的话题 id；共享库详情"去对话检索"跳转用（Task 4）。 */
+  chatTopicId: string | null
+  selectedSharedKbId: string | null
+  selectedSharedKb: SharedKnowledgeBase | undefined
+  selectSharedKb: (kbId: string) => void
   selectedBase: KnowledgeBase | undefined
   selectedBaseId: string
   selectedItemId: string | null
@@ -114,6 +124,9 @@ interface KnowledgePageProviderProps extends PropsWithChildren {
 export const KnowledgePageProvider = ({ children, baseId, onBaseIdChange }: KnowledgePageProviderProps) => {
   const { t } = useTranslation()
   const { bases, isLoading, error: basesError } = useKnowledgeBases()
+  const { payload: sharedPayload, isLoading: isSharedKbsLoading } = useSharedKnowledgeBases()
+  const sharedKbs = sharedPayload.kbs
+  const chatTopicId = sharedPayload.chatTopicId
   const { groups } = useKnowledgeGroups()
   const { createGroup, isCreating: isCreatingGroup } = useCreateKnowledgeGroup()
   const { createBase, isCreating: isCreatingBase } = useCreateKnowledgeBase()
@@ -155,6 +168,21 @@ export const KnowledgePageProvider = ({ children, baseId, onBaseIdChange }: Know
     return bases.find((base) => base.id === selectedBaseId)
   }, [bases, selectedBaseId])
 
+  const [selectedSharedKbId, setSelectedSharedKbId] = useState<string | null>(null)
+  const selectedSharedKb = useMemo(
+    () => sharedKbs.find((kb) => kb.id === selectedSharedKbId),
+    [sharedKbs, selectedSharedKbId]
+  )
+
+  // 陈旧选中清理：共享目录一旦降级为空（网关不可达/响应异常），已选中的共享库不再
+  // 解析，而 selectedSharedKbId 仍卡在选中态——自动选中效果被它压制，详情区会永远
+  // 停在加载占位。目录不在加载中却解析不到时清掉选中，让自动选中恢复接管。
+  useEffect(() => {
+    if (isSharedKbsLoading || !selectedSharedKbId || selectedSharedKb) return
+
+    setSelectedSharedKbId(null)
+  }, [isSharedKbsLoading, selectedSharedKb, selectedSharedKbId])
+
   const resetFilePreview = useCallback(() => {
     const nextVersion = previewNavigationVersionRef.current + 1
     previewNavigationVersionRef.current = nextVersion
@@ -175,8 +203,11 @@ export const KnowledgePageProvider = ({ children, baseId, onBaseIdChange }: Know
     [previewNavigationVersion]
   )
 
+  // `selectedSharedKbId` guard: while a shared (dept/public) kb is selected the detail
+  // area shows that catalog entry, so the auto-select must not bounce the route back
+  // to the first local base.
   useEffect(() => {
-    if (isLoading || basesError) return
+    if (isLoading || basesError || selectedSharedKbId) return
 
     if (pendingSelectedBaseId) {
       if (bases.some((base) => base.id === pendingSelectedBaseId)) {
@@ -208,11 +239,21 @@ export const KnowledgePageProvider = ({ children, baseId, onBaseIdChange }: Know
       setSelectedItemId(null)
       onBaseIdChange(bases[0].id)
     }
-  }, [bases, basesError, isLoading, onBaseIdChange, pendingSelectedBaseId, resetBaseNavigation, selectedBaseId])
+  }, [
+    bases,
+    basesError,
+    isLoading,
+    onBaseIdChange,
+    pendingSelectedBaseId,
+    resetBaseNavigation,
+    selectedBaseId,
+    selectedSharedKbId
+  ])
 
   const selectBase = useCallback(
     (baseId: string) => {
       resetBaseNavigation()
+      setSelectedSharedKbId(null)
 
       if (bases.some((base) => base.id === baseId)) {
         setPendingSelectedBaseId(null)
@@ -226,6 +267,19 @@ export const KnowledgePageProvider = ({ children, baseId, onBaseIdChange }: Know
       setSelectedItemId(null)
     },
     [bases, resetBaseNavigation, onBaseIdChange]
+  )
+
+  const selectSharedKb = useCallback(
+    (kbId: string) => {
+      resetBaseNavigation()
+      setSelectedItemId(null)
+      setSelectedSharedKbId(kbId)
+      // 释放本地库路由选中：详情区按 selectedSharedKb 分流（Task 4）。
+      if (selectedBaseId) {
+        onBaseIdChange()
+      }
+    },
+    [resetBaseNavigation, selectedBaseId, onBaseIdChange]
   )
 
   useEffect(() => {
@@ -459,6 +513,12 @@ export const KnowledgePageProvider = ({ children, baseId, onBaseIdChange }: Know
       bases,
       groups,
       isLoading,
+      isSharedKbsLoading,
+      sharedKbs,
+      chatTopicId,
+      selectedSharedKbId,
+      selectedSharedKb,
+      selectSharedKb,
       selectedBase,
       selectedBaseId,
       selectedItemId,
@@ -522,6 +582,7 @@ export const KnowledgePageProvider = ({ children, baseId, onBaseIdChange }: Know
       activeTab,
       baseNavigationVersion,
       bases,
+      chatTopicId,
       createBase,
       editingBase,
       editingGroup,
@@ -554,6 +615,7 @@ export const KnowledgePageProvider = ({ children, baseId, onBaseIdChange }: Know
       isCreatingBase,
       isCreatingGroup,
       isLoading,
+      isSharedKbsLoading,
       isUpdatingBase,
       isUpdatingGroup,
       isRestoringBase,
@@ -572,10 +634,14 @@ export const KnowledgePageProvider = ({ children, baseId, onBaseIdChange }: Know
       restoreBase,
       resetFilePreview,
       selectBase,
+      selectSharedKb,
       selectedBase,
       selectedBaseId,
       selectedItemId,
       selectedItemView,
+      selectedSharedKb,
+      selectedSharedKbId,
+      sharedKbs,
       submitCreateGroup,
       submitRenameBase,
       submitRenameGroup

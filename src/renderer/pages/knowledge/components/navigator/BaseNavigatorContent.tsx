@@ -8,6 +8,7 @@ import type { KnowledgeBaseListItem } from '@shared/data/api/schemas/knowledges'
 
 import BaseNavigatorGroupSection from './BaseNavigatorGroupSection'
 import KnowledgeBaseRow from './KnowledgeBaseRow'
+import SharedKnowledgeSection from './SharedKnowledgeSection'
 import type { BaseNavigatorContentProps } from './types'
 import { UNGROUPED_SECTION_VALUE } from './types'
 
@@ -25,7 +26,10 @@ const BaseNavigatorContent = ({
   onCreateBaseInGroup,
   onCreateGroup,
   onDeleteGroup,
-  onDeleteBase
+  onDeleteBase,
+  sharedKbs,
+  selectedSharedKbId,
+  onSelectSharedKb
 }: BaseNavigatorContentProps) => {
   const { t } = useTranslation()
   const {
@@ -77,65 +81,86 @@ const BaseNavigatorContent = ({
   // shape keeps the accordion.
   const flatSection = groups.length === 0 && sections.length === 1 && sections[0].groupId === null ? sections[0] : null
 
-  // `pt-1 pb-3` mirrors the assistant and agent rails' list padding — the top inset is
-  // what separates the first row from the create action above it.
+  const deptKbs = useMemo(() => sharedKbs.filter((kb) => kb.scope === 'dept'), [sharedKbs])
+  const publicKbs = useMemo(() => sharedKbs.filter((kb) => kb.scope === 'public'), [sharedKbs])
+
+  // `pt-1 pb-3` mirrors the assistant and agent rails' list padding. The personal
+  // scope section wraps the pre-existing local-base body unchanged; dept/public are
+  // read-only gateway catalogs below it, so the three sidebars read as one family.
   return (
     <Scrollbar className="min-h-0 flex-1 overflow-x-hidden pt-1 pb-3">
-      {isLoading ? (
-        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-          {t('common.loading')}
-        </div>
-      ) : sections.length === 0 || (flatSection && flatSection.items.length === 0) ? (
-        // KnowledgePage normally owns the zero-base empty state; keep a defensive fallback
-        // for a transient empty collection while navigator data changes.
-        <EmptyState preset="no-result" title={t('common.no_results')} compact className="h-full" />
-      ) : flatSection ? (
-        <div className="space-y-1">
-          {flatSection.items.map((base) => (
-            <KnowledgeBaseRow
-              key={base.id}
-              base={base}
-              groups={groups}
-              selected={base.id === selectedBaseId}
-              onSelectBase={onSelectBase}
-              onMoveBase={onMoveBase}
-              onRenameBase={onRenameBase}
-              onCreateGroup={onCreateGroup}
-              onDeleteBase={onDeleteBase}
-              onToggleSidebar={handleToggleSidebar}
-              sidebarPinned={sidebarPinnedBaseIds.has(base.id)}
-            />
-          ))}
-        </div>
-      ) : (
-        <Accordion type="multiple" value={openValues} onValueChange={handleValueChange} className="space-y-3">
-          {sections.map((section) => {
-            const groupValue = section.groupId ?? UNGROUPED_SECTION_VALUE
-            const group = section.groupId ? groupById.get(section.groupId) : undefined
+      <div className="space-y-3">
+        <SharedKnowledgeSection scope="personal" onCreate={() => onCreateBaseInGroup()}>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+              {t('common.loading')}
+            </div>
+          ) : sections.length === 0 || (flatSection && flatSection.items.length === 0) ? (
+            // KnowledgePage normally owns the zero-base empty state; keep a defensive fallback
+            // for a transient empty collection while navigator data changes.
+            <EmptyState preset="no-result" title={t('common.no_results')} compact />
+          ) : flatSection ? (
+            <div className="space-y-1">
+              {flatSection.items.map((base) => (
+                <KnowledgeBaseRow
+                  key={base.id}
+                  base={base}
+                  groups={groups}
+                  selected={base.id === selectedBaseId}
+                  onSelectBase={onSelectBase}
+                  onMoveBase={onMoveBase}
+                  onRenameBase={onRenameBase}
+                  onCreateGroup={onCreateGroup}
+                  onDeleteBase={onDeleteBase}
+                  onToggleSidebar={handleToggleSidebar}
+                  sidebarPinned={sidebarPinnedBaseIds.has(base.id)}
+                />
+              ))}
+            </div>
+          ) : (
+            <Accordion type="multiple" value={openValues} onValueChange={handleValueChange} className="space-y-3">
+              {sections.map((section) => {
+                const groupValue = section.groupId ?? UNGROUPED_SECTION_VALUE
+                const group = section.groupId ? groupById.get(section.groupId) : undefined
 
-            return (
-              <BaseNavigatorGroupSection
-                key={groupValue}
-                section={section}
-                group={group}
-                groupLabel={group?.name ?? getGroupLabel(section.groupId)}
-                groups={groups}
-                selectedBaseId={selectedBaseId}
-                onSelectBase={onSelectBase}
-                onMoveBase={onMoveBase}
-                onRenameBase={onRenameBase}
-                onRenameGroup={onRenameGroup}
-                onCreateBaseInGroup={onCreateBaseInGroup}
-                onCreateGroup={onCreateGroup}
-                onDeleteGroup={onDeleteGroup}
-                onDeleteBase={onDeleteBase}
-                onToggleSidebar={handleToggleSidebar}
-                sidebarPinnedBaseIds={sidebarPinnedBaseIds}
-              />
-            )
-          })}
-        </Accordion>
-      )}
+                return (
+                  <BaseNavigatorGroupSection
+                    key={groupValue}
+                    section={section}
+                    group={group}
+                    groupLabel={group?.name ?? getGroupLabel(section.groupId)}
+                    groups={groups}
+                    selectedBaseId={selectedBaseId}
+                    onSelectBase={onSelectBase}
+                    onMoveBase={onMoveBase}
+                    onRenameBase={onRenameBase}
+                    onRenameGroup={onRenameGroup}
+                    onCreateBaseInGroup={onCreateBaseInGroup}
+                    onCreateGroup={onCreateGroup}
+                    onDeleteGroup={onDeleteGroup}
+                    onDeleteBase={onDeleteBase}
+                    onToggleSidebar={handleToggleSidebar}
+                    sidebarPinnedBaseIds={sidebarPinnedBaseIds}
+                  />
+                )
+              })}
+            </Accordion>
+          )}
+        </SharedKnowledgeSection>
+
+        <SharedKnowledgeSection
+          scope="dept"
+          kbs={deptKbs}
+          selectedSharedKbId={selectedSharedKbId}
+          onSelectSharedKb={onSelectSharedKb}
+        />
+        <SharedKnowledgeSection
+          scope="public"
+          kbs={publicKbs}
+          selectedSharedKbId={selectedSharedKbId}
+          onSelectSharedKb={onSelectSharedKb}
+        />
+      </div>
     </Scrollbar>
   )
 }

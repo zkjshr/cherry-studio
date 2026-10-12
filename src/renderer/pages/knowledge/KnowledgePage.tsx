@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 
 import { KnowledgePageProvider, useKnowledgePage } from './KnowledgePageProvider'
+import SharedKnowledgeBaseDetail from './components/SharedKnowledgeBaseDetail'
 import KnowledgePageDetailSection from './sections/KnowledgePageDetailSection'
 import KnowledgePageDialogSection from './sections/KnowledgePageDialogSection'
 import KnowledgePageEmptyStateSection from './sections/KnowledgePageEmptyStateSection'
@@ -9,12 +10,15 @@ import KnowledgePageShell from './sections/KnowledgePageShell'
 
 const KnowledgePageContent = () => {
   const { t } = useTranslation()
-  const { bases, filePreview, isLoading, selectedBase } = useKnowledgePage()
+  const { bases, filePreview, isLoading, isSharedKbsLoading, selectedBase, selectedSharedKb, sharedKbs } =
+    useKnowledgePage()
 
-  // No knowledge bases yet → a dedicated full-screen empty page (no navigator) that
-  // guides the user to create their first base. The create dialog still mounts via
-  // KnowledgePageDialogSection below.
-  if (!isLoading && bases.length === 0) {
+  // No local knowledge bases AND no shared ones (and neither list still loading —
+  // the shared-kb gateway fetch can take up to 15s, and enterprise users with zero
+  // personal bases must not land in the "create first base" screen meanwhile) → a
+  // dedicated full-screen empty page (no navigator) that guides the user to create
+  // their first base. The create dialog still mounts via KnowledgePageDialogSection below.
+  if (!isLoading && !isSharedKbsLoading && bases.length === 0 && sharedKbs.length === 0) {
     return <KnowledgePageEmptyStateSection />
   }
 
@@ -23,7 +27,9 @@ const KnowledgePageContent = () => {
       <div className={filePreview ? 'hidden' : 'contents'} hidden={Boolean(filePreview)}>
         <KnowledgePageNavigatorSection />
       </div>
-      {selectedBase ? (
+      {selectedSharedKb ? (
+        <SharedKnowledgeBaseDetail />
+      ) : selectedBase ? (
         <KnowledgePageDetailSection />
       ) : (
         <main

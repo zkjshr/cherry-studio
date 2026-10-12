@@ -3,7 +3,7 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import type { KnowledgePageBaseGroupSection } from '@renderer/pages/knowledge/utils/group'
 import type { KnowledgeBaseListItem } from '@shared/data/api/schemas/knowledges'
 import type { Group } from '@shared/data/types/group'
-import type { KnowledgeBase } from '@shared/data/types/knowledge'
+import type { KnowledgeBase, SharedKnowledgeBase } from '@shared/data/types/knowledge'
 
 export interface BaseNavigatorContentProps {
   isLoading: boolean
@@ -16,10 +16,14 @@ export interface BaseNavigatorContentProps {
   onMoveBase: (baseId: string, groupId: string | null) => Promise<void> | void
   onRenameBase: (base: Pick<KnowledgeBase, 'id' | 'name'>) => void
   onRenameGroup: (group: Pick<Group, 'id' | 'name'>) => void
-  onCreateBaseInGroup: (groupId: string) => void
+  /** Called without a groupId from the personal section's header + button. */
+  onCreateBaseInGroup: (groupId?: string) => void
   onCreateGroup: (baseId: string) => void
   onDeleteGroup: (groupId: string) => Promise<void> | void
   onDeleteBase: (baseId: string) => Promise<void> | void
+  sharedKbs: SharedKnowledgeBase[]
+  selectedSharedKbId: string | null
+  onSelectSharedKb: (kbId: string) => void
 }
 
 export interface BaseNavigatorGroupSectionProps {

@@ -17,6 +17,9 @@ const KnowledgePageNavigatorSection = () => {
     contentRef,
     selectedBaseId,
     selectBase,
+    sharedKbs,
+    selectedSharedKbId,
+    selectSharedKb,
     openCreateGroupDialog,
     openCreateBaseDialog,
     moveBase,
@@ -58,6 +61,9 @@ const KnowledgePageNavigatorSection = () => {
       onRenameGroup={openRenameGroupDialog}
       onDeleteGroup={deleteGroup}
       onDeleteBase={deleteBase}
+      sharedKbs={sharedKbs}
+      selectedSharedKbId={selectedSharedKbId}
+      onSelectSharedKb={selectSharedKb}
       onResizeStart={startNavigatorResize}
     />
   )

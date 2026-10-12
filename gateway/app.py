@@ -14,6 +14,7 @@ from gateway import mcp_weknora, weknora, weknora_proxy
 from gateway.auth import require_token
 from gateway.config import settings
 from gateway.enterprise import router as enterprise_router
+from gateway.knowledge import router as knowledge_router
 from gateway.marketplace import router as marketplace_router
 from gateway.merge import merge_deep_results
 from gateway.model_proxy import router as model_proxy_router
@@ -52,6 +53,7 @@ app.include_router(openai_compat_router)
 app.include_router(model_proxy_router)
 app.include_router(enterprise_router)
 app.include_router(marketplace_router)
+app.include_router(knowledge_router)
 app.include_router(weknora_proxy.router)
 # MCP 挂 /mcp 前缀（子应用内路由 /weknora）→ 客户端 URL http://<gateway>/mcp/weknora
 app.mount("/mcp", mcp_weknora.asgi_app)

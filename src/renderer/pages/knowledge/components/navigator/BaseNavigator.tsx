@@ -1,16 +1,14 @@
-import { Plus } from 'lucide-react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { ResourceList } from '@renderer/components/chat/resourceList/base'
 import {
   buildKnowledgeBaseGroupSections,
   DEFAULT_KNOWLEDGE_GROUP_LABEL_KEY
 } from '@renderer/pages/knowledge/utils/group'
 import type { KnowledgeBaseListItem } from '@shared/data/api/schemas/knowledges'
 import type { Group } from '@shared/data/types/group'
-import type { KnowledgeBase } from '@shared/data/types/knowledge'
+import type { KnowledgeBase, SharedKnowledgeBase } from '@shared/data/types/knowledge'
 
 import BaseNavigatorContent from './BaseNavigatorContent'
 import BaseNavigatorResizeHandle from './BaseNavigatorResizeHandle'
@@ -29,6 +27,9 @@ interface BaseNavigatorProps {
   onRenameGroup: (group: Pick<Group, 'id' | 'name'>) => void
   onDeleteGroup: (groupId: string) => Promise<void> | void
   onDeleteBase: (baseId: string) => Promise<void> | void
+  sharedKbs: SharedKnowledgeBase[]
+  selectedSharedKbId: string | null
+  onSelectSharedKb: (kbId: string) => void
   onResizeStart: (event: ReactMouseEvent<HTMLDivElement>) => void
 }
 
@@ -46,6 +47,9 @@ const BaseNavigator = ({
   onRenameGroup,
   onDeleteGroup,
   onDeleteBase,
+  sharedKbs,
+  selectedSharedKbId,
+  onSelectSharedKb,
   onResizeStart
 }: BaseNavigatorProps) => {
   const { t } = useTranslation()
@@ -70,20 +74,9 @@ const BaseNavigator = ({
   return (
     <div data-ui="knowledge.navigation" style={{ width }} className="relative h-full min-h-0 shrink-0">
       {/* `p-1.5` and the padding-free rows below match the assistant and agent rails'
-          `ResourceList.Frame`, so the three sidebars indent identically. */}
+          `ResourceList.Frame`, so the three sidebars indent identically. The create
+          action now lives in the personal scope section's header (SharedKnowledgeSection). */}
       <aside className="flex size-full min-h-0 flex-col border-r-[0.5px] border-border p-1.5">
-        <div className="flex shrink-0 flex-col gap-2">
-          {/* Same borderless header item the assistant and agent rails use, so the three
-              sidebars read as one family. */}
-          <ResourceList.HeaderItem
-            type="button"
-            icon={<Plus />}
-            label={t('knowledge.add.title')}
-            aria-label={t('knowledge.add.title')}
-            onClick={() => onCreateBase()}
-          />
-        </div>
-
         <BaseNavigatorContent
           isLoading={isLoading}
           sections={knowledgeBaseGroupSections}
@@ -99,6 +92,9 @@ const BaseNavigator = ({
           onCreateGroup={onCreateGroup}
           onDeleteGroup={onDeleteGroup}
           onDeleteBase={onDeleteBase}
+          sharedKbs={sharedKbs}
+          selectedSharedKbId={selectedSharedKbId}
+          onSelectSharedKb={onSelectSharedKb}
         />
       </aside>
 

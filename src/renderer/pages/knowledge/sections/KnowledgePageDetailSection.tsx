@@ -22,6 +22,7 @@ const KnowledgePageDetailSection = () => {
   const { t } = useTranslation()
   const {
     selectedBase,
+    selectedSharedKb,
     selectedBaseId,
     selectedItemId,
     selectedItemView,
@@ -70,7 +71,8 @@ const KnowledgePageDetailSection = () => {
   const { deleteItem, deleteItems } = useDeleteKnowledgeItem(selectedBaseId)
   const { reindexItem, reindexItems } = useReindexKnowledgeItem(selectedBaseId)
 
-  if (!selectedBase) {
+  // 共享库选中时页面层已分流到 SharedKnowledgeBaseDetail，本组件直接不渲染。
+  if (!selectedBase || selectedSharedKb) {
     return null
   }
 

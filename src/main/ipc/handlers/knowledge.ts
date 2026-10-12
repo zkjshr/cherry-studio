@@ -1,4 +1,5 @@
 import { application } from '@application'
+import { listSharedKnowledgeBases } from '@main/features/knowledge'
 import { ErrorCode, isDataApiError } from '@shared/data/api/errors'
 import { IpcError } from '@shared/ipc/errors/IpcError'
 import { knowledgeErrorCodes } from '@shared/ipc/errors/knowledge'
@@ -44,5 +45,6 @@ export const knowledgeHandlers: IpcHandlersFor<typeof knowledgeRequestSchemas> =
     }
   },
   'knowledge.list_item_chunks': async ({ baseId, itemId }) =>
-    application.get('KnowledgeService').listItemChunks(baseId, itemId)
+    application.get('KnowledgeService').listItemChunks(baseId, itemId),
+  'knowledge.list_shared_kbs': async () => listSharedKnowledgeBases()
 }

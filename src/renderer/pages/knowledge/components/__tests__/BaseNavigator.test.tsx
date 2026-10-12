@@ -454,6 +454,9 @@ vi.mock('react-i18next', () => ({
           'knowledge.title': '知识库',
           'knowledge.add.title': '新建知识库',
           'knowledge.search': '搜索知识库',
+          'knowledge.scope.department': '部门知识库',
+          'knowledge.scope.personal': '个人知识库',
+          'knowledge.scope.public': '公共知识库',
           'knowledge.empty': '暂无知识库',
           'common.no_results': '无结果',
           'knowledge.groups.add': '新建分组',
@@ -549,6 +552,9 @@ describe('BaseNavigator', () => {
     onRenameGroup: vi.fn(),
     onDeleteGroup: vi.fn(),
     onDeleteBase: vi.fn(),
+    sharedKbs: [],
+    selectedSharedKbId: null,
+    onSelectSharedKb: vi.fn(),
     onResizeStart: vi.fn()
   }
 
@@ -595,6 +601,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -621,6 +630,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -647,6 +659,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -675,6 +690,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -696,6 +714,9 @@ describe('BaseNavigator', () => {
       onRenameGroup: vi.fn(),
       onDeleteGroup: vi.fn(),
       onDeleteBase: vi.fn(),
+      sharedKbs: [],
+      selectedSharedKbId: null,
+      onSelectSharedKb: vi.fn(),
       onResizeStart: vi.fn()
     }
     const { rerender } = render(
@@ -743,6 +764,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -770,6 +794,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -804,6 +831,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -849,6 +879,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -881,6 +914,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -909,6 +945,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -934,6 +973,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -960,6 +1002,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -992,6 +1037,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={onDeleteBase}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -1024,6 +1072,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -1051,6 +1102,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={onRenameGroup}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -1081,6 +1135,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -1110,6 +1167,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={onDeleteGroup}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -1144,6 +1204,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -1169,6 +1232,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -1200,6 +1266,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -1232,6 +1301,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={vi.fn()}
       />
     )
@@ -1266,6 +1338,9 @@ describe('BaseNavigator', () => {
         onRenameGroup={vi.fn()}
         onDeleteGroup={vi.fn()}
         onDeleteBase={vi.fn()}
+        sharedKbs={[]}
+        selectedSharedKbId={null}
+        onSelectSharedKb={vi.fn()}
         onResizeStart={onResizeStart}
       />
     )
@@ -1273,5 +1348,68 @@ describe('BaseNavigator', () => {
     fireEvent.mouseDown(screen.getByTestId('base-navigator-resize-handle'))
 
     expect(onResizeStart).toHaveBeenCalledTimes(1)
+  })
+
+  describe('fixed scope sections', () => {
+    const basePropsWithShared = (over: Partial<ComponentProps<typeof BaseNavigatorComponent>> = {}) => ({
+      ...baseProps,
+      bases: [] as KnowledgeBaseListItem[],
+      sharedKbs: [
+        { id: 'k1', name: '101-结构所规范库', scope: 'dept' as const },
+        { id: 'k2', name: '通用设计资料', scope: 'public' as const }
+      ],
+      selectedSharedKbId: null,
+      onSelectSharedKb: vi.fn(),
+      ...over
+    })
+
+    it('renders the three fixed scope section headers', () => {
+      render(<BaseNavigator {...basePropsWithShared()} />)
+
+      expect(screen.getByText('个人知识库')).toBeInTheDocument()
+      expect(screen.getByText('部门知识库')).toBeInTheDocument()
+      expect(screen.getByText('公共知识库')).toBeInTheDocument()
+    })
+
+    it('renders shared kbs under their scope section and selects on click', () => {
+      const onSelectSharedKb = vi.fn()
+
+      render(<BaseNavigator {...basePropsWithShared({ onSelectSharedKb })} />)
+
+      const deptSection = screen
+        .getByText('部门知识库')
+        .closest<HTMLElement>('[data-ui="knowledge.scope-section"]')!
+      expect(within(deptSection).getByText('101-结构所规范库')).toBeInTheDocument()
+      const publicSection = screen
+        .getByText('公共知识库')
+        .closest<HTMLElement>('[data-ui="knowledge.scope-section"]')!
+      expect(within(publicSection).getByText('通用设计资料')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByText('101-结构所规范库'))
+      expect(onSelectSharedKb).toHaveBeenCalledWith('k1')
+    })
+
+    it('highlights the selected shared kb and forwards local base clicks to onSelectBase', () => {
+      const onSelectBase = vi.fn()
+
+      render(
+        <BaseNavigator
+          {...basePropsWithShared({
+            bases: [createKnowledgeBase({ id: 'base-1', name: 'Alpha' })],
+            selectedSharedKbId: 'k2',
+            onSelectBase
+          })}
+        />
+      )
+
+      const publicSection = screen
+        .getByText('公共知识库')
+        .closest<HTMLElement>('[data-ui="knowledge.scope-section"]')!
+      const selectedRow = within(publicSection).getByText('通用设计资料').closest('button')!
+      expect(selectedRow.getAttribute('data-selected')).toBe('true')
+
+      fireEvent.click(screen.getByRole('button', { name: /Alpha/ }))
+      expect(onSelectBase).toHaveBeenCalledWith('base-1')
+    })
   })
 })

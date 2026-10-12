@@ -1,6 +1,7 @@
 // Runtime service API.
 export { KnowledgeService } from './KnowledgeService'
 export { KnowledgeVectorStoreService } from './pipeline/vectorstore/KnowledgeVectorStoreService'
+export { listSharedKnowledgeBases } from './sharedKbs'
 
 // Index & material rebuild surface — the knowledge-owned primitives the indexing runtime and the
 // v1→v2 migrators (data/migration/v2) build a base's materials + vector index from. The index
