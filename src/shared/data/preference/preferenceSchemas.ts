@@ -863,7 +863,7 @@ export const DefaultPreferences: PreferenceSchemas = {
     'shortcut.topic.sidebar.toggle': { binding: ['CommandOrControl', ']'], enabled: true },
     'topic.naming.enabled': true,
     'topic.naming_prompt': '',
-    'topic.tab.display_mode': 'assistant',
+    'topic.tab.display_mode': 'time',
     'topic.tab.position': 'left',
     'topic.tab.show': true,
     'ui.custom_css': '',

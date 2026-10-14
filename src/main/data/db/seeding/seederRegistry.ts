@@ -1,4 +1,5 @@
 import type { ISeeder } from '../types'
+import { AgentSessionDisplayModeSeeder } from './seeders/AgentSessionDisplayModeSeeder'
 import { BrowserCapabilityUpgradeSeeder } from './seeders/browserCapabilityUpgradeSeeder'
 import { BuiltinMcpServerSeeder } from './seeders/builtinMcpServerSeeder'
 import { CherryAiDefaultModelSeeder } from './seeders/cherryaiDefaultModelSeeder'
@@ -13,7 +14,7 @@ import { PreferenceSeeder } from './seeders/preferenceSeeder'
 import { PresetProviderSeeder } from './seeders/presetProviderSeeder'
 import { SidebarShortcutMigrationSeeder } from './seeders/sidebarShortcutMigrationSeeder'
 import { TJADBrandRenameSeeder } from './seeders/TJADBrandRenameSeeder'
-import { AgentSessionDisplayModeSeeder } from './seeders/AgentSessionDisplayModeSeeder'
+import { TopicDisplayModeSeeder } from './seeders/TopicDisplayModeSeeder'
 import { TranslateLanguageSeeder } from './seeders/translateLanguageSeeder'
 import { WebSearchPreferenceUpgradeSeeder } from './seeders/WebSearchPreferenceUpgradeSeeder'
 
@@ -33,6 +34,7 @@ export const seeders: ISeeder[] = [
   new CherryAssistantSeeder(),
   new TJADBrandRenameSeeder(),
   new AgentSessionDisplayModeSeeder(),
+  new TopicDisplayModeSeeder(),
   new CherrySupportSeeder(),
   new DefaultAssistantSeeder(),
   new LongTextPastePreferenceUpgradeSeeder(),

@@ -33,8 +33,8 @@ describe('DefaultPreferences', () => {
     expect(DefaultPreferences.default['chat.web_search.default_search_keywords_provider']).toBe(searchKeywordsDefault)
   })
 
-  it('groups conversations and agent sessions by the assistant and agent defaults for new users', () => {
-    const topicDisplayDefault: PreferenceSchemas['default']['topic.tab.display_mode'] = 'assistant'
+  it('groups conversations by time and agent sessions by working directory for new users', () => {
+    const topicDisplayDefault: PreferenceSchemas['default']['topic.tab.display_mode'] = 'time'
     const agentSessionDisplayDefault: PreferenceSchemas['default']['agent.session.display_mode'] = 'workdir'
 
     expect(DefaultPreferences.default['topic.tab.display_mode']).toBe(topicDisplayDefault)
